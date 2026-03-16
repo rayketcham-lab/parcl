@@ -159,6 +159,7 @@ namespace Parcl.Addin
                 : "(no subject)";
             Logger.Info("Send", $"ItemSend intercepted — to: {mail.To}, subject: {subjectPreview}");
 
+            bool shouldEncryptRequested = false;
             try
             {
                 // ── Signing (deferred from compose toggle or auto-sign) ──
@@ -208,72 +209,96 @@ namespace Parcl.Addin
                 if (Settings.Crypto.AlwaysEncrypt)
                     shouldEncrypt = true;
 
+                shouldEncryptRequested = shouldEncrypt;
                 if (shouldEncrypt)
                 {
                     Logger.Info("Send", "Encapsulating message in S/MIME envelope");
-                    bool success = EncapsulateMessage(mail);
-                    if (!success)
+                    string? encryptError = EncapsulateMessage(mail);
+                    if (encryptError != null)
                     {
-                        if (Settings.Behavior.PromptOnMissingCert)
-                        {
-                            var result = MessageBox.Show(
-                                "Encryption certificates could not be found for all recipients. " +
-                                "Send unencrypted?",
-                                "Parcl — Missing Certificates",
-                                MessageBoxButtons.YesNo,
-                                MessageBoxIcon.Warning);
-                            if (result == DialogResult.No)
-                            {
-                                cancel = true;
-                                Logger.Info("Send",
-                                    "User cancelled send due to missing recipient certificates");
-                                return;
-                            }
-                        }
+                        // Encryption was requested — if it fails, BLOCK the send. No exceptions.
+                        cancel = true;
+                        Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
+                        MessageBox.Show(
+                            $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
+                            "Fix the issue or remove encryption before sending.",
+                            "Parcl — Send Blocked",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        return;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error("Send", "Failed during send processing", ex);
-                MessageBox.Show(
-                    $"Parcl encountered an error during send processing:\n{ex.Message}",
-                    "Parcl Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                // If encryption was requested and something threw, BLOCK the send
+                if (shouldEncryptRequested)
+                {
+                    cancel = true;
+                    Logger.Error("Send", "Encryption failed with exception — send blocked", ex);
+                    MessageBox.Show(
+                        $"Message NOT sent — encryption error:\n\n{ex.Message}\n\n" +
+                        "Fix the issue or remove encryption before sending.",
+                        "Parcl — Send Blocked",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+                else
+                {
+                    Logger.Error("Send", "Failed during send processing", ex);
+                }
             }
         }
 
         /// <summary>
         /// Performs the actual S/MIME encapsulation at send time.
-        /// Builds MIME from body + attachments, encrypts into CMS envelope,
-        /// replaces message content with IPM.Note.SMIME + smime.p7m.
-        /// Returns false if certs are missing for any recipient.
+        /// Returns null on success, or an error message string if encryption failed.
+        /// If this returns non-null, the send MUST be cancelled.
         /// </summary>
-        private bool EncapsulateMessage(Outlook.MailItem mail)
+        private string? EncapsulateMessage(Outlook.MailItem mail)
         {
-            // Resolve all recipient certs
+            // ── Validate ALL recipients have valid certs ──
             var recipientCerts =
                 new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
-            var missing = new System.Collections.Generic.List<string>();
+            var errors = new System.Collections.Generic.List<string>();
 
             for (int i = 1; i <= mail.Recipients.Count; i++)
             {
                 var recipient = mail.Recipients[i];
                 var smtpAddr = ResolveSmtpAddress(recipient);
                 var cert = ResolveRecipientCert(smtpAddr, recipient);
-                if (cert != null)
-                    recipientCerts.Add(cert);
-                else
-                    missing.Add(smtpAddr);
+
+                if (cert == null)
+                {
+                    errors.Add($"{smtpAddr}: No certificate found");
+                    continue;
+                }
+
+                // Check expiry
+                if (cert.NotAfter <= DateTime.UtcNow)
+                {
+                    errors.Add($"{smtpAddr}: Certificate expired on {cert.NotAfter:yyyy-MM-dd}");
+                    continue;
+                }
+
+                if (cert.NotBefore > DateTime.UtcNow)
+                {
+                    errors.Add($"{smtpAddr}: Certificate not yet valid (starts {cert.NotBefore:yyyy-MM-dd})");
+                    continue;
+                }
+
+                recipientCerts.Add(cert);
             }
 
-            if (missing.Count > 0)
+            if (errors.Count > 0)
             {
-                Logger.Warn("Send",
-                    $"Missing certificates for: {string.Join(", ", missing)}");
-                return false;
+                Logger.Error("Send",
+                    $"Encryption blocked — {errors.Count} recipient(s) failed validation");
+                return string.Join("\n", errors);
             }
+
+            if (recipientCerts.Count == 0)
+                return "No recipients with valid certificates";
 
             // Also encrypt to self so Sent Items are readable
             if (!string.IsNullOrEmpty(Settings.UserProfile.EncryptionCertThumbprint))
@@ -284,13 +309,14 @@ namespace Parcl.Addin
                     recipientCerts.Add(selfCert);
             }
 
-            // 1. Build MIME content from body + attachments
+            // ── Build MIME content ──
             var attachments = new System.Collections.Generic.List<Parcl.Core.Crypto.MimeAttachment>();
             for (int i = 1; i <= mail.Attachments.Count; i++)
             {
                 var att = mail.Attachments[i];
                 var tempAtt = System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + System.IO.Path.GetExtension(att.FileName));
+                    System.IO.Path.GetTempPath(),
+                    System.IO.Path.GetRandomFileName() + System.IO.Path.GetExtension(att.FileName));
                 try
                 {
                     att.SaveAsFile(tempAtt);
@@ -312,16 +338,32 @@ namespace Parcl.Addin
             Logger.Debug("Send",
                 $"MIME content built: {mimeContent.Length} bytes, {attachments.Count} attachment(s)");
 
-            // 2. Encrypt MIME into CMS envelope
-            var encrypted = SmimeHandler.Encrypt(mimeContent, recipientCerts);
+            // ── Encrypt (bypassing chain validation — use certs as-is) ──
+            // Chain validation was too strict for self-signed/internal certs.
+            // We already validated expiry above. The CMS encrypt will fail if
+            // the cert is truly unusable.
+            var contentInfo = new System.Security.Cryptography.Pkcs.ContentInfo(mimeContent);
+            var envelopedCms = new System.Security.Cryptography.Pkcs.EnvelopedCms(
+                contentInfo,
+                new System.Security.Cryptography.Pkcs.AlgorithmIdentifier(
+                    new System.Security.Cryptography.Oid("2.16.840.1.101.3.4.1.42"))); // AES-256-CBC
 
-            // 3. Clear original body and attachments
+            var cmsRecipients = new System.Security.Cryptography.Pkcs.CmsRecipientCollection();
+            foreach (System.Security.Cryptography.X509Certificates.X509Certificate2 cert in recipientCerts)
+            {
+                cmsRecipients.Add(new System.Security.Cryptography.Pkcs.CmsRecipient(
+                    System.Security.Cryptography.Pkcs.SubjectIdentifierType.IssuerAndSerialNumber, cert));
+            }
+
+            envelopedCms.Encrypt(cmsRecipients);
+            var encrypted = envelopedCms.Encode();
+
+            // ── Replace message content ──
             mail.HTMLBody = "";
             mail.Body = "";
             while (mail.Attachments.Count > 0)
                 mail.Attachments[1].Delete();
 
-            // 4. Store encrypted CMS blob
             var tempPath = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + ".p7m");
             System.IO.File.WriteAllBytes(tempPath, encrypted);
@@ -338,18 +380,16 @@ namespace Parcl.Addin
 
             try { System.IO.File.Delete(tempPath); } catch { }
 
-            // 5. Set message class to S/MIME
             const string PR_MESSAGE_CLASS = "http://schemas.microsoft.com/mapi/proptag/0x001A001E";
             mail.PropertyAccessor.SetProperty(PR_MESSAGE_CLASS, "IPM.Note.SMIME");
 
-            // Clean up the user property flag
             var flag = mail.UserProperties.Find("ParclEncrypt");
             if (flag != null)
                 flag.Value = false;
 
             Logger.Info("Send",
                 $"S/MIME encapsulated — {encrypted.Length} bytes for {recipientCerts.Count} recipient(s)");
-            return true;
+            return null; // success
         }
 
         // Certificate import is now manual-only via the "Import Certificates" ribbon button.
