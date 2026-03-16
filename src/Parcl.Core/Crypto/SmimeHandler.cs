@@ -1,0 +1,92 @@
+using System;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
+
+namespace Parcl.Core.Crypto
+{
+    public class SmimeHandler
+    {
+        public byte[] Sign(byte[] content, X509Certificate2 signingCert)
+        {
+            if (!signingCert.HasPrivateKey)
+                throw new InvalidOperationException("Signing certificate must have a private key.");
+
+            var contentInfo = new ContentInfo(content);
+            var signedCms = new SignedCms(contentInfo, detached: false);
+            var signer = new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, signingCert)
+            {
+                DigestAlgorithm = new Oid("2.16.840.1.101.3.4.2.1") // SHA-256
+            };
+            signer.IncludeOption = X509IncludeOption.WholeChain;
+
+            signedCms.ComputeSignature(signer);
+            return signedCms.Encode();
+        }
+
+        public SmimeVerifyResult Verify(byte[] signedData)
+        {
+            try
+            {
+                var signedCms = new SignedCms();
+                signedCms.Decode(signedData);
+                signedCms.CheckSignature(verifySignatureOnly: false);
+
+                var signerCert = signedCms.SignerInfos[0].Certificate;
+                return new SmimeVerifyResult
+                {
+                    IsValid = true,
+                    Content = signedCms.ContentInfo.Content,
+                    SignerCertificate = signerCert != null
+                        ? Models.CertificateInfo.FromX509(signerCert)
+                        : null
+                };
+            }
+            catch (CryptographicException ex)
+            {
+                return new SmimeVerifyResult
+                {
+                    IsValid = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
+        public byte[] Encrypt(byte[] content, X509Certificate2Collection recipientCerts)
+        {
+            if (recipientCerts.Count == 0)
+                throw new ArgumentException("At least one recipient certificate is required.");
+
+            var contentInfo = new ContentInfo(content);
+            var envelopedCms = new EnvelopedCms(contentInfo,
+                new AlgorithmIdentifier(new Oid("2.16.840.1.101.3.4.1.42"))); // AES-256-CBC
+
+            var recipients = new CmsRecipientCollection();
+            foreach (X509Certificate2 cert in recipientCerts)
+            {
+                recipients.Add(new CmsRecipient(SubjectIdentifierType.IssuerAndSerialNumber, cert));
+            }
+
+            envelopedCms.Encrypt(recipients);
+            return envelopedCms.Encode();
+        }
+
+        public byte[] Decrypt(byte[] encryptedData)
+        {
+            var envelopedCms = new EnvelopedCms();
+            envelopedCms.Decode(encryptedData);
+
+            // Decrypt uses the current user's certificate store automatically
+            envelopedCms.Decrypt();
+            return envelopedCms.ContentInfo.Content;
+        }
+    }
+
+    public class SmimeVerifyResult
+    {
+        public bool IsValid { get; set; }
+        public byte[]? Content { get; set; }
+        public Models.CertificateInfo? SignerCertificate { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+}

@@ -1,0 +1,75 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Newtonsoft.Json;
+using Parcl.Core.Models;
+
+namespace Parcl.Core.Config
+{
+    public class ParclSettings
+    {
+        private static readonly string SettingsDir =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Parcl");
+
+        private static readonly string SettingsFile =
+            Path.Combine(SettingsDir, "settings.json");
+
+        public UserProfile UserProfile { get; set; } = new UserProfile();
+        public List<LdapDirectoryEntry> LdapDirectories { get; set; } = new List<LdapDirectoryEntry>();
+        public CryptoPreferences Crypto { get; set; } = new CryptoPreferences();
+        public CacheSettings Cache { get; set; } = new CacheSettings();
+        public BehaviorSettings Behavior { get; set; } = new BehaviorSettings();
+
+        public static ParclSettings Load()
+        {
+            if (!File.Exists(SettingsFile))
+                return CreateDefault();
+
+            var json = File.ReadAllText(SettingsFile);
+            return JsonConvert.DeserializeObject<ParclSettings>(json) ?? CreateDefault();
+        }
+
+        public void Save()
+        {
+            Directory.CreateDirectory(SettingsDir);
+            var json = JsonConvert.SerializeObject(this, Formatting.Indented);
+            File.WriteAllText(SettingsFile, json);
+        }
+
+        private static ParclSettings CreateDefault()
+        {
+            var settings = new ParclSettings();
+            settings.Save();
+            return settings;
+        }
+    }
+
+    public class CryptoPreferences
+    {
+        public string EncryptionAlgorithm { get; set; } = "AES-256-CBC";
+        public string HashAlgorithm { get; set; } = "SHA-256";
+        public bool AlwaysSign { get; set; }
+        public bool AlwaysEncrypt { get; set; }
+    }
+
+    public class CacheSettings
+    {
+        public bool EnableCertCache { get; set; } = true;
+        public int CacheExpirationHours { get; set; } = 24;
+        public int MaxCacheEntries { get; set; } = 500;
+    }
+
+    public class BehaviorSettings
+    {
+        public LookupTrigger AutoLookup { get; set; } = LookupTrigger.OnCompose;
+        public bool PromptOnMissingCert { get; set; } = true;
+        public bool ShowStatusBar { get; set; } = true;
+    }
+
+    public enum LookupTrigger
+    {
+        Manual,
+        OnCompose,
+        OnSend
+    }
+}
