@@ -118,13 +118,13 @@ namespace Parcl.Core.Config
                 var cutoff = DateTime.Now.AddDays(-maxAgeDays);
                 foreach (var file in Directory.GetFiles(_logDir, "parcl-*.jsonl"))
                 {
-                    if (File.GetCreationTime(file) < cutoff)
+                    if (File.GetLastWriteTime(file) < cutoff)
                         File.Delete(file);
                 }
                 // Also clean legacy .log files
                 foreach (var file in Directory.GetFiles(_logDir, "parcl-*.log"))
                 {
-                    if (File.GetCreationTime(file) < cutoff)
+                    if (File.GetLastWriteTime(file) < cutoff)
                         File.Delete(file);
                 }
             }
@@ -166,6 +166,24 @@ namespace Parcl.Core.Config
             using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
                 rng.GetBytes(bytes);
             return BitConverter.ToString(bytes).Replace("-", "").ToLower();
+        }
+
+        /// <summary>
+        /// Masks the local part of an email address for PII-safe logging.
+        /// "james.r.ketcham@rtx.com" becomes "jam***@rtx.com".
+        /// Returns the original string unchanged if it does not contain '@'.
+        /// </summary>
+        public static string SanitizeEmail(string email)
+        {
+            if (string.IsNullOrEmpty(email)) return email;
+            int atIndex = email.IndexOf('@');
+            if (atIndex < 0) return email;
+
+            string localPart = email.Substring(0, atIndex);
+            string domain = email.Substring(atIndex); // includes '@'
+
+            int visibleChars = Math.Min(3, localPart.Length);
+            return localPart.Substring(0, visibleChars) + "***" + domain;
         }
 
         private static string EscapeJson(string s)

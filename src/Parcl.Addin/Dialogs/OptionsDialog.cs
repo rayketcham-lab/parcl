@@ -382,11 +382,18 @@ namespace Parcl.Addin.Dialogs
 
         private void LdapAdd_Click(object? sender, EventArgs e)
         {
+            if (!int.TryParse(_ldapPort.Text, out var p) || p < 1 || p > 65535)
+            {
+                MessageBox.Show("Port must be a number between 1 and 65535.",
+                    "Parcl — Invalid Port", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             var dir = new LdapDirectoryEntry
             {
                 Name = "New Directory",
                 Server = _ldapServer.Text,
-                Port = int.TryParse(_ldapPort.Text, out var p) ? p : 636,
+                Port = p,
                 BaseDn = _ldapBaseDn.Text,
                 SearchFilter = _ldapFilter.Text,
                 AuthType = (AuthType)(_ldapAuth.SelectedIndex >= 0 ? _ldapAuth.SelectedIndex : 2),

@@ -131,14 +131,14 @@ namespace Parcl.Addin
         {
             // Ribbon toggle states (Encrypt/Sign) must reflect the SELECTED message
             try { _ribbon?.Invalidate(); }
-            catch { }
+            catch (Exception ex) { Logger?.Debug("Ribbon", $"Invalidate failed on SelectionChange: {ex.Message}"); }
         }
 
         private void Explorer_FolderSwitch()
         {
             // Hide/show Parcl tab when switching between Mail/Calendar/People
             try { _ribbon?.Invalidate(); }
-            catch { }
+            catch (Exception ex) { Logger?.Debug("Ribbon", $"Invalidate failed on FolderSwitch: {ex.Message}"); }
         }
 
         // ── Inbox icon classification ─────────────────────────────────────
@@ -220,7 +220,7 @@ namespace Parcl.Addin
                     $"Icon set: {(isEncrypted ? "encrypted" : "")}" +
                     $"{(isSigned ? " signed" : "")} -> icon {iconIndex} for: {mail.Subject}");
             }
-            catch { }
+            catch (Exception ex) { Logger?.Debug("Icons", $"ClassifyAndSetIcon failed: {ex.Message}"); }
         }
 
         private void Inspectors_NewInspector(Outlook.Inspector inspector)
@@ -240,7 +240,7 @@ namespace Parcl.Addin
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Logger?.Debug("Inspector", $"NewInspector handler failed: {ex.Message}"); }
         }
 
         /// <summary>
