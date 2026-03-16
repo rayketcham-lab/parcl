@@ -1,0 +1,117 @@
+<UserControl x:Class="Parcl.Addin.Animations.AnimatedShield"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="48" Height="56">
+
+    <UserControl.Resources>
+        <Storyboard x:Key="SignAnimation">
+            <!-- Shield fills with color from bottom to top -->
+            <DoubleAnimation Storyboard.TargetName="FillClip"
+                             Storyboard.TargetProperty="Rect.Y"
+                             From="56" To="0"
+                             Duration="0:0:0.6">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- Checkmark draws in -->
+            <DoubleAnimation Storyboard.TargetName="Checkmark"
+                             Storyboard.TargetProperty="StrokeDashOffset"
+                             From="40" To="0"
+                             Duration="0:0:0.4"
+                             BeginTime="0:0:0.5">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- Glow burst -->
+            <DoubleAnimation Storyboard.TargetName="ShieldGlow"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0" To="1" Duration="0:0:0.2"
+                             BeginTime="0:0:0.8"
+                             AutoReverse="True" />
+            <DoubleAnimation Storyboard.TargetName="ShieldGlowScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="0.8" To="1.3" Duration="0:0:0.4"
+                             BeginTime="0:0:0.8" />
+            <DoubleAnimation Storyboard.TargetName="ShieldGlowScale"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="0.8" To="1.3" Duration="0:0:0.4"
+                             BeginTime="0:0:0.8" />
+        </Storyboard>
+
+        <Storyboard x:Key="VerifyFailAnimation">
+            <!-- Shake -->
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ShieldTranslate"
+                                           Storyboard.TargetProperty="X"
+                                           Duration="0:0:0.5">
+                <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0" />
+                <LinearDoubleKeyFrame Value="-6" KeyTime="0:0:0.05" />
+                <LinearDoubleKeyFrame Value="6" KeyTime="0:0:0.1" />
+                <LinearDoubleKeyFrame Value="-5" KeyTime="0:0:0.15" />
+                <LinearDoubleKeyFrame Value="5" KeyTime="0:0:0.2" />
+                <LinearDoubleKeyFrame Value="-3" KeyTime="0:0:0.25" />
+                <LinearDoubleKeyFrame Value="3" KeyTime="0:0:0.3" />
+                <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0.35" />
+            </DoubleAnimationUsingKeyFrames>
+            <!-- Flash red -->
+            <ColorAnimation Storyboard.TargetName="ShieldFill"
+                            Storyboard.TargetProperty="(Path.Fill).(SolidColorBrush.Color)"
+                            To="#FF5252" Duration="0:0:0.2"
+                            AutoReverse="True"
+                            RepeatBehavior="2x" />
+        </Storyboard>
+
+        <Storyboard x:Key="IdlePulse" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="ShieldGlow"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0" To="0.4" Duration="0:0:1.5"
+                             AutoReverse="True" />
+        </Storyboard>
+    </UserControl.Resources>
+
+    <Grid RenderTransformOrigin="0.5,0.5">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="ShieldTranslate" />
+        </Grid.RenderTransform>
+
+        <!-- Glow -->
+        <Path x:Name="ShieldGlow"
+              Data="M 24,2 L 44,14 L 44,32 C 44,44 24,54 24,54 C 24,54 4,44 4,32 L 4,14 Z"
+              Opacity="0"
+              RenderTransformOrigin="0.5,0.5">
+            <Path.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#6600E676" Offset="0" />
+                    <GradientStop Color="#0000E676" Offset="1" />
+                </RadialGradientBrush>
+            </Path.Fill>
+            <Path.RenderTransform>
+                <ScaleTransform x:Name="ShieldGlowScale" ScaleX="1" ScaleY="1" />
+            </Path.RenderTransform>
+        </Path>
+
+        <!-- Shield outline -->
+        <Path Stroke="#4FC3F7" StrokeThickness="2"
+              Data="M 24,2 L 44,14 L 44,32 C 44,44 24,54 24,54 C 24,54 4,44 4,32 L 4,14 Z"
+              Fill="Transparent" />
+
+        <!-- Shield fill (clipped for animation) -->
+        <Path x:Name="ShieldFill"
+              Data="M 24,2 L 44,14 L 44,32 C 44,44 24,54 24,54 C 24,54 4,44 4,32 L 4,14 Z"
+              Fill="#1B6EF3" Opacity="0.6">
+            <Path.Clip>
+                <RectangleGeometry x:Name="FillClip" Rect="0,56,48,56" />
+            </Path.Clip>
+        </Path>
+
+        <!-- Checkmark -->
+        <Path x:Name="Checkmark"
+              Data="M 14,28 L 22,36 L 36,18"
+              Stroke="White" StrokeThickness="3"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              StrokeLineJoin="Round"
+              StrokeDashArray="40"
+              StrokeDashOffset="40" />
+    </Grid>
+</UserControl>

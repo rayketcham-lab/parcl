@@ -1,0 +1,84 @@
+<UserControl x:Class="Parcl.Addin.Animations.AnimatedLock"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="48" Height="48">
+
+    <UserControl.Resources>
+        <Storyboard x:Key="LockAnimation">
+            <!-- Shackle rotates from open (30°) to closed (0°) -->
+            <DoubleAnimation Storyboard.TargetName="ShackleTransform"
+                             Storyboard.TargetProperty="Angle"
+                             From="30" To="0"
+                             Duration="0:0:0.4"
+                             EasingFunction="{StaticResource BounceEase}" />
+            <!-- Flash green on lock -->
+            <ColorAnimation Storyboard.TargetName="LockBody"
+                            Storyboard.TargetProperty="(Rectangle.Fill).(SolidColorBrush.Color)"
+                            To="#00E676" Duration="0:0:0.2"
+                            BeginTime="0:0:0.4"
+                            AutoReverse="True" />
+            <!-- Glow pulse -->
+            <DoubleAnimation Storyboard.TargetName="LockGlow"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0" To="0.8" Duration="0:0:0.3"
+                             BeginTime="0:0:0.3"
+                             AutoReverse="True" />
+        </Storyboard>
+
+        <Storyboard x:Key="UnlockAnimation">
+            <DoubleAnimation Storyboard.TargetName="ShackleTransform"
+                             Storyboard.TargetProperty="Angle"
+                             From="0" To="30"
+                             Duration="0:0:0.3" />
+            <ColorAnimation Storyboard.TargetName="LockBody"
+                            Storyboard.TargetProperty="(Rectangle.Fill).(SolidColorBrush.Color)"
+                            To="#FF5252" Duration="0:0:0.2"
+                            BeginTime="0:0:0.2"
+                            AutoReverse="True" />
+        </Storyboard>
+
+        <BounceEase x:Key="BounceEase" Bounces="2" Bounciness="4" EasingMode="EaseOut" />
+    </UserControl.Resources>
+
+    <Canvas>
+        <!-- Glow behind lock -->
+        <Ellipse x:Name="LockGlow"
+                 Canvas.Left="-4" Canvas.Top="-4"
+                 Width="56" Height="56"
+                 Opacity="0">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#6600E676" Offset="0" />
+                    <GradientStop Color="#0000E676" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+
+        <!-- Shackle (the curved part on top) -->
+        <Path x:Name="Shackle"
+              Canvas.Left="10" Canvas.Top="2"
+              Stroke="#4FC3F7" StrokeThickness="4"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Data="M 0,20 L 0,10 A 14,14 0 0 1 28,10 L 28,20"
+              RenderTransformOrigin="1,1">
+            <Path.RenderTransform>
+                <RotateTransform x:Name="ShackleTransform" Angle="0" CenterX="28" CenterY="20" />
+            </Path.RenderTransform>
+        </Path>
+
+        <!-- Lock body -->
+        <Rectangle x:Name="LockBody"
+                   Canvas.Left="6" Canvas.Top="22"
+                   Width="36" Height="24"
+                   RadiusX="4" RadiusY="4"
+                   Fill="#1B6EF3" />
+
+        <!-- Keyhole -->
+        <Ellipse Canvas.Left="20" Canvas.Top="28"
+                 Width="8" Height="8"
+                 Fill="#1A1A2E" />
+        <Rectangle Canvas.Left="22" Canvas.Top="33"
+                   Width="4" Height="8"
+                   Fill="#1A1A2E" />
+    </Canvas>
+</UserControl>

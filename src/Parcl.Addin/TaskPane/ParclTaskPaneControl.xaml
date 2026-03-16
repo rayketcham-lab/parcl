@@ -1,0 +1,338 @@
+<UserControl x:Class="Parcl.Addin.TaskPane.ParclTaskPaneControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:anim="clr-namespace:Parcl.Addin.Animations">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Animations/ParclTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Slide-in from right -->
+            <Storyboard x:Key="SlideIn">
+                <DoubleAnimation Storyboard.TargetName="MainPanel"
+                                 Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                 From="300" To="0" Duration="0:0:0.4">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut" />
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="MainPanel"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="0" To="1" Duration="0:0:0.3" />
+            </Storyboard>
+
+            <!-- Status text fade -->
+            <Storyboard x:Key="StatusFade">
+                <DoubleAnimation Storyboard.TargetName="StatusText"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="0" To="1" Duration="0:0:0.3" />
+                <DoubleAnimation Storyboard.TargetName="StatusText"
+                                 Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                 From="10" To="0" Duration="0:0:0.3" />
+            </Storyboard>
+
+            <!-- Card hover glow -->
+            <Storyboard x:Key="CardGlowIn">
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#4FC3F7" Duration="0:0:0.2" />
+            </Storyboard>
+            <Storyboard x:Key="CardGlowOut">
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="Transparent" Duration="0:0:0.2" />
+            </Storyboard>
+
+            <!-- Activity bar shimmer -->
+            <Storyboard x:Key="ShimmerAnimation" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="ShimmerTranslate"
+                                 Storyboard.TargetProperty="X"
+                                 From="-200" To="400" Duration="0:0:2" />
+            </Storyboard>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Background="{StaticResource ParclBgGradient}">
+        <Grid x:Name="MainPanel" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform />
+            </Grid.RenderTransform>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                <StackPanel>
+
+                    <!-- Header with animated logo -->
+                    <Grid Margin="0,8,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Animated shield logo -->
+                        <anim:AnimatedShield x:Name="LogoShield" Grid.Column="0"
+                                             Margin="0,0,12,0" />
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="PARCL"
+                                       FontSize="22" FontWeight="Bold"
+                                       Foreground="{StaticResource ParclTextBrush}"
+                                       FontFamily="Segoe UI" />
+                            <TextBlock Text="Secure Email Manager"
+                                       FontSize="11"
+                                       Foreground="{StaticResource ParclTextDimBrush}"
+                                       FontFamily="Segoe UI" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Activity shimmer bar -->
+                    <Border Height="3" CornerRadius="2" Margin="0,0,0,12"
+                            Background="#11FFFFFF" ClipToBounds="True">
+                        <Rectangle Width="80" Height="3" HorizontalAlignment="Left">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                    <GradientStop Color="Transparent" Offset="0" />
+                                    <GradientStop Color="#664FC3F7" Offset="0.5" />
+                                    <GradientStop Color="Transparent" Offset="1" />
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="ShimmerTranslate" X="-200" />
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
+                    </Border>
+
+                    <!-- Security Status Card -->
+                    <Border Style="{StaticResource ParclCard}"
+                            BorderBrush="Transparent" BorderThickness="1">
+                        <Border.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowIn}" />
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowOut}" />
+                            </EventTrigger>
+                        </Border.Triggers>
+                        <StackPanel>
+                            <TextBlock Text="SECURITY STATUS"
+                                       FontSize="10" FontWeight="Bold" LetterSpacing="1"
+                                       Foreground="{StaticResource ParclTextDimBrush}"
+                                       Margin="0,0,0,8" />
+
+                            <!-- Encryption status row -->
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <anim:AnimatedLock x:Name="EncryptionLock"
+                                                   Grid.Column="0"
+                                                   Width="24" Height="24"
+                                                   Margin="0,0,8,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Encryption"
+                                               Foreground="{StaticResource ParclTextBrush}"
+                                               FontSize="12" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="EncryptionStatus"
+                                               Text="Ready"
+                                               Foreground="{StaticResource ParclTextDimBrush}"
+                                               FontSize="10" />
+                                </StackPanel>
+                                <anim:CertificateBadge x:Name="EncryptionBadge"
+                                                       Grid.Column="2"
+                                                       Width="20" Height="20" />
+                            </Grid>
+
+                            <!-- Signing status row -->
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <anim:AnimatedShield x:Name="SigningShield"
+                                                     Grid.Column="0"
+                                                     Width="24" Height="24"
+                                                     Margin="0,0,8,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Digital Signature"
+                                               Foreground="{StaticResource ParclTextBrush}"
+                                               FontSize="12" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="SigningStatus"
+                                               Text="Ready"
+                                               Foreground="{StaticResource ParclTextDimBrush}"
+                                               FontSize="10" />
+                                </StackPanel>
+                                <anim:CertificateBadge x:Name="SigningBadge"
+                                                       Grid.Column="2"
+                                                       Width="20" Height="20" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Certificate Info Card -->
+                    <Border Style="{StaticResource ParclCard}"
+                            BorderBrush="Transparent" BorderThickness="1">
+                        <Border.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowIn}" />
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowOut}" />
+                            </EventTrigger>
+                        </Border.Triggers>
+                        <StackPanel>
+                            <TextBlock Text="YOUR CERTIFICATES"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="{StaticResource ParclTextDimBrush}"
+                                       Margin="0,0,0,8" />
+
+                            <TextBlock x:Name="SignCertLabel" Text="Signing: Not selected"
+                                       Foreground="{StaticResource ParclTextBrush}"
+                                       FontSize="11" Margin="0,2" />
+                            <TextBlock x:Name="EncCertLabel" Text="Encryption: Not selected"
+                                       Foreground="{StaticResource ParclTextBrush}"
+                                       FontSize="11" Margin="0,2" />
+
+                            <Button x:Name="BtnSelectCerts"
+                                    Content="Select Certificates"
+                                    Style="{StaticResource ParclAnimatedButton}"
+                                    Margin="0,8,0,0"
+                                    Click="BtnSelectCerts_Click" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Quick Actions Card -->
+                    <Border Style="{StaticResource ParclCard}"
+                            BorderBrush="Transparent" BorderThickness="1">
+                        <Border.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowIn}" />
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowOut}" />
+                            </EventTrigger>
+                        </Border.Triggers>
+                        <StackPanel>
+                            <TextBlock Text="QUICK ACTIONS"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="{StaticResource ParclTextDimBrush}"
+                                       Margin="0,0,0,8" />
+
+                            <UniformGrid Columns="2" Rows="2">
+                                <Button x:Name="BtnEncrypt"
+                                        Content="&#x1F512; Encrypt"
+                                        Style="{StaticResource ParclAnimatedButton}"
+                                        Margin="2" FontSize="11"
+                                        Click="BtnEncrypt_Click" />
+                                <Button x:Name="BtnDecrypt"
+                                        Content="&#x1F513; Decrypt"
+                                        Style="{StaticResource ParclAnimatedButton}"
+                                        Margin="2" FontSize="11"
+                                        Click="BtnDecrypt_Click" />
+                                <Button x:Name="BtnSign"
+                                        Content="&#x270D; Sign"
+                                        Style="{StaticResource ParclAnimatedButton}"
+                                        Margin="2" FontSize="11"
+                                        Click="BtnSign_Click" />
+                                <Button x:Name="BtnExchange"
+                                        Content="&#x1F4E8; Exchange"
+                                        Style="{StaticResource ParclAnimatedButton}"
+                                        Margin="2" FontSize="11"
+                                        Click="BtnExchange_Click" />
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- LDAP Lookup Card -->
+                    <Border Style="{StaticResource ParclCard}"
+                            BorderBrush="Transparent" BorderThickness="1">
+                        <Border.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowIn}" />
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard Storyboard="{StaticResource CardGlowOut}" />
+                            </EventTrigger>
+                        </Border.Triggers>
+                        <StackPanel>
+                            <TextBlock Text="CERTIFICATE LOOKUP"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="{StaticResource ParclTextDimBrush}"
+                                       Margin="0,0,0,8" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox x:Name="LookupEmailBox"
+                                         Grid.Column="0"
+                                         Background="#11FFFFFF"
+                                         Foreground="{StaticResource ParclTextBrush}"
+                                         BorderBrush="#33FFFFFF"
+                                         Padding="8,6"
+                                         FontSize="11"
+                                         Text="user@example.com"
+                                         GotFocus="LookupEmailBox_GotFocus" />
+
+                                <Button x:Name="BtnLookup"
+                                        Grid.Column="1"
+                                        Content="Search"
+                                        Style="{StaticResource ParclAnimatedButton}"
+                                        Margin="4,0,0,0"
+                                        Padding="12,6"
+                                        FontSize="11"
+                                        Click="BtnLookup_Click" />
+                            </Grid>
+
+                            <!-- Lookup spinner (hidden by default) -->
+                            <Grid x:Name="LookupSpinnerPanel" Visibility="Collapsed"
+                                  Margin="0,8,0,0" HorizontalAlignment="Center">
+                                <anim:SpinnerRing Width="32" Height="32" />
+                                <TextBlock Text="Searching directories..."
+                                           Foreground="{StaticResource ParclTextDimBrush}"
+                                           FontSize="10" VerticalAlignment="Center"
+                                           Margin="40,0,0,0" />
+                            </Grid>
+
+                            <!-- Lookup results -->
+                            <ListBox x:Name="LookupResults"
+                                     Visibility="Collapsed"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource ParclTextBrush}"
+                                     FontSize="11"
+                                     Margin="0,8,0,0"
+                                     MaxHeight="120" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Status bar -->
+                    <Border Background="#11FFFFFF" CornerRadius="4"
+                            Padding="8,6" Margin="0,4,0,0">
+                        <TextBlock x:Name="StatusText"
+                                   Text="Parcl ready"
+                                   Foreground="{StaticResource ParclTextDimBrush}"
+                                   FontSize="10"
+                                   Opacity="0">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="Loaded">
+            <BeginStoryboard Storyboard="{StaticResource SlideIn}" />
+            <BeginStoryboard Storyboard="{StaticResource ShimmerAnimation}" />
+            <BeginStoryboard Storyboard="{StaticResource StatusFade}" />
+        </EventTrigger>
+    </UserControl.Triggers>
+</UserControl>

@@ -51,6 +51,14 @@
                   onAction="OnLookupClick" />
         </group>
         <group id="grpSettings" label="Settings">
+          <toggleButton id="btnDashboard"
+                        label="Dashboard"
+                        screentip="Toggle Parcl Dashboard"
+                        supertip="Show or hide the animated Parcl security dashboard panel."
+                        size="large"
+                        imageMso="ViewSideBySide"
+                        onAction="OnDashboardToggle"
+                        getPressed="GetDashboardPressed" />
           <button id="btnOptions"
                   label="Options"
                   screentip="Parcl Options"

@@ -1,0 +1,154 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Parcl Color Palette -->
+    <Color x:Key="ParclPrimary">#1B6EF3</Color>
+    <Color x:Key="ParclPrimaryDark">#0D47A1</Color>
+    <Color x:Key="ParclPrimaryLight">#64B5F6</Color>
+    <Color x:Key="ParclAccent">#00E676</Color>
+    <Color x:Key="ParclAccentGold">#FFD740</Color>
+    <Color x:Key="ParclDanger">#FF5252</Color>
+    <Color x:Key="ParclSuccess">#00E676</Color>
+    <Color x:Key="ParclWarning">#FFC107</Color>
+    <Color x:Key="ParclBgDark">#1A1A2E</Color>
+    <Color x:Key="ParclBgMid">#16213E</Color>
+    <Color x:Key="ParclBgLight">#0F3460</Color>
+    <Color x:Key="ParclText">#E8E8E8</Color>
+    <Color x:Key="ParclTextDim">#8892B0</Color>
+    <Color x:Key="ParclGlow">#4FC3F7</Color>
+
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="ParclPrimaryBrush" Color="{StaticResource ParclPrimary}" />
+    <SolidColorBrush x:Key="ParclAccentBrush" Color="{StaticResource ParclAccent}" />
+    <SolidColorBrush x:Key="ParclDangerBrush" Color="{StaticResource ParclDanger}" />
+    <SolidColorBrush x:Key="ParclSuccessBrush" Color="{StaticResource ParclSuccess}" />
+    <SolidColorBrush x:Key="ParclWarningBrush" Color="{StaticResource ParclWarning}" />
+    <SolidColorBrush x:Key="ParclTextBrush" Color="{StaticResource ParclText}" />
+    <SolidColorBrush x:Key="ParclTextDimBrush" Color="{StaticResource ParclTextDim}" />
+
+    <!-- Gradient backgrounds -->
+    <LinearGradientBrush x:Key="ParclBgGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource ParclBgDark}" Offset="0" />
+        <GradientStop Color="{StaticResource ParclBgMid}" Offset="0.5" />
+        <GradientStop Color="{StaticResource ParclBgLight}" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="ParclButtonGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="{StaticResource ParclPrimary}" Offset="0" />
+        <GradientStop Color="{StaticResource ParclPrimaryDark}" Offset="1" />
+    </LinearGradientBrush>
+
+    <RadialGradientBrush x:Key="ParclGlowBrush" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Color="#664FC3F7" Offset="0" />
+        <GradientStop Color="#004FC3F7" Offset="1" />
+    </RadialGradientBrush>
+
+    <!-- Animated Button Style -->
+    <Style x:Key="ParclAnimatedButton" TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource ParclButtonGradient}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <!-- Glow effect behind button -->
+                        <Border x:Name="GlowBorder"
+                                CornerRadius="6"
+                                Background="{StaticResource ParclGlowBrush}"
+                                Margin="-4"
+                                Opacity="0">
+                            <Border.Effect>
+                                <BlurEffect Radius="12" />
+                            </Border.Effect>
+                        </Border>
+                        <!-- Main button -->
+                        <Border x:Name="MainBorder"
+                                CornerRadius="6"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect ShadowDepth="2" BlurRadius="6" Opacity="0.3" Color="Black" />
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.8" Duration="0:0:0.3" />
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.03" Duration="0:0:0.15" />
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.03" Duration="0:0:0.15" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.3" />
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0" Duration="0:0:0.15" />
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0" Duration="0:0:0.15" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="0.97" Duration="0:0:0.05" />
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="0.97" Duration="0:0:0.05" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Status indicator style (pulsing dot) -->
+    <Style x:Key="StatusDot" TargetType="Ellipse">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Fill" Value="{StaticResource ParclTextDimBrush}" />
+    </Style>
+
+    <!-- Card panel style -->
+    <Style x:Key="ParclCard" TargetType="Border">
+        <Setter Property="Background" Value="#22FFFFFF" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.15" Color="Black" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

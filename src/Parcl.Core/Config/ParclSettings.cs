@@ -36,6 +36,16 @@ namespace Parcl.Core.Config
             File.WriteAllText(SettingsFile, json);
         }
 
+        public void Reload()
+        {
+            var fresh = Load();
+            UserProfile = fresh.UserProfile;
+            LdapDirectories = fresh.LdapDirectories;
+            Crypto = fresh.Crypto;
+            Cache = fresh.Cache;
+            Behavior = fresh.Behavior;
+        }
+
         private static ParclSettings CreateDefault()
         {
             var settings = new ParclSettings();
