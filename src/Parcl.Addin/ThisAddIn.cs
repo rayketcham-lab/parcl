@@ -33,7 +33,7 @@ namespace Parcl.Addin
 
                 CertStore = new CertificateStore();
                 SmimeHandler = new SmimeHandler();
-                LdapLookup = new LdapCertLookup();
+                LdapLookup = new LdapCertLookup(Logger);
                 CertCache = new CertificateCache(
                     Settings.Cache.CacheExpirationHours,
                     Settings.Cache.MaxCacheEntries);
@@ -68,18 +68,86 @@ namespace Parcl.Addin
         {
             if (item is Outlook.MailItem mail)
             {
-                Logger.Info("Send", $"ItemSend intercepted — to: {mail.To}, subject: {mail.Subject?.Substring(0, Math.Min(30, mail.Subject?.Length ?? 0))}");
+                var subjectPreview = mail.Subject != null
+                    ? mail.Subject.Substring(0, Math.Min(30, mail.Subject.Length))
+                    : "(no subject)";
+                Logger.Info("Send", $"ItemSend intercepted — to: {mail.To}, subject: {subjectPreview}");
 
-                if (Settings.Crypto.AlwaysEncrypt)
+                try
                 {
-                    Logger.Info("Send", "Auto-encrypt enabled — checking recipient certificates");
-                    // TODO: Wire into full encrypt pipeline
+                    if (Settings.Crypto.AlwaysSign && !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
+                    {
+                        Logger.Info("Send", "Auto-sign enabled — applying digital signature");
+                        var signingCert = CertStore.FindByThumbprint(Settings.UserProfile.SigningCertThumbprint);
+                        if (signingCert != null && signingCert.HasPrivateKey)
+                        {
+                            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(mail.Body ?? string.Empty);
+                            var signed = SmimeHandler.Sign(bodyBytes, signingCert);
+                            mail.PropertyAccessor.SetProperty(
+                                "http://schemas.microsoft.com/mapi/proptag/0x6E010102", signed);
+                            Logger.Info("Send", "Digital signature applied successfully");
+                        }
+                        else
+                        {
+                            Logger.Warn("Send", "Signing certificate not found or has no private key — skipping auto-sign");
+                        }
+                    }
+
+                    if (Settings.Crypto.AlwaysEncrypt)
+                    {
+                        Logger.Info("Send", "Auto-encrypt enabled — looking up recipient certificates");
+                        var recipients = mail.Recipients;
+                        var recipientCerts = new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
+                        bool allResolved = true;
+
+                        for (int i = 1; i <= recipients.Count; i++)
+                        {
+                            var recipientEmail = recipients[i].Address;
+                            var cert = CertStore.FindByEmail(recipientEmail);
+                            if (cert != null)
+                            {
+                                recipientCerts.Add(cert);
+                            }
+                            else
+                            {
+                                Logger.Warn("Send", $"No encryption certificate found for {recipientEmail}");
+                                allResolved = false;
+                            }
+                        }
+
+                        if (!allResolved && Settings.Behavior.PromptOnMissingCert)
+                        {
+                            var result = System.Windows.Forms.MessageBox.Show(
+                                "Encryption certificates could not be found for all recipients. Send unencrypted?",
+                                "Parcl — Missing Certificates",
+                                System.Windows.Forms.MessageBoxButtons.YesNo,
+                                System.Windows.Forms.MessageBoxIcon.Warning);
+                            if (result == System.Windows.Forms.DialogResult.No)
+                            {
+                                cancel = true;
+                                Logger.Info("Send", "User cancelled send due to missing recipient certificates");
+                                return;
+                            }
+                        }
+
+                        if (recipientCerts.Count > 0 && allResolved)
+                        {
+                            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(mail.Body ?? string.Empty);
+                            var encrypted = SmimeHandler.Encrypt(bodyBytes, recipientCerts);
+                            mail.PropertyAccessor.SetProperty(
+                                "http://schemas.microsoft.com/mapi/proptag/0x6E010102", encrypted);
+                            Logger.Info("Send", $"Message encrypted for {recipientCerts.Count} recipient(s)");
+                        }
+                    }
                 }
-
-                if (Settings.Crypto.AlwaysSign)
+                catch (Exception ex)
                 {
-                    Logger.Info("Send", "Auto-sign enabled — applying digital signature");
-                    // TODO: Wire into full sign pipeline
+                    Logger.Error("Send", "Failed during auto-encrypt/sign", ex);
+                    System.Windows.Forms.MessageBox.Show(
+                        $"Parcl encountered an error during send processing:\n{ex.Message}",
+                        "Parcl Error",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Error);
                 }
             }
         }

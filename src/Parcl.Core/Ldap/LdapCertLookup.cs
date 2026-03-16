@@ -3,12 +3,22 @@ using System.Collections.Generic;
 using System.DirectoryServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using Parcl.Core.Config;
 using Parcl.Core.Models;
 
 namespace Parcl.Core.Ldap
 {
     public class LdapCertLookup
     {
+        private readonly ParclLogger? _logger;
+
+        public LdapCertLookup() { }
+
+        public LdapCertLookup(ParclLogger logger)
+        {
+            _logger = logger;
+        }
+
         public Task<List<CertificateInfo>> LookupByEmailAsync(string email, LdapDirectoryEntry directory)
         {
             return Task.Run(() => LookupByEmail(email, directory));
@@ -45,9 +55,9 @@ namespace Parcl.Core.Ldap
                                 if (info.IsValid)
                                     results.Add(info);
                             }
-                            catch (Exception)
+                            catch (Exception ex)
                             {
-                                // Skip malformed certificates
+                                _logger?.Warn("LDAP", $"Skipping malformed certificate from {directory.Server}: {ex.Message}");
                             }
                         }
                     }
@@ -71,9 +81,9 @@ namespace Parcl.Core.Ldap
                         var results = LookupByEmail(email, dir);
                         allResults.AddRange(results);
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Log and continue to next directory
+                        _logger?.Warn("LDAP", $"Directory lookup failed for {dir.Name} ({dir.Server}): {ex.Message}");
                     }
                 }
                 return allResults;
@@ -92,8 +102,9 @@ namespace Parcl.Core.Ldap
                     return true;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                _logger?.Error("LDAP", $"Connection test failed for {directory.Server}:{directory.Port}: {ex.Message}");
                 return false;
             }
         }
@@ -110,7 +121,10 @@ namespace Parcl.Core.Ldap
                 case AuthType.Simple:
                     entry.AuthenticationType = AuthenticationTypes.None;
                     if (config.BindDn != null)
+                    {
                         entry.Username = config.BindDn;
+                        entry.Password = config.BindPassword ?? string.Empty;
+                    }
                     break;
                 case AuthType.Negotiate:
                     entry.AuthenticationType = AuthenticationTypes.Secure;

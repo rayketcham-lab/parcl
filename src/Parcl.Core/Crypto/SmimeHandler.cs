@@ -32,6 +32,15 @@ namespace Parcl.Core.Crypto
                 signedCms.Decode(signedData);
                 signedCms.CheckSignature(verifySignatureOnly: false);
 
+                if (signedCms.SignerInfos.Count == 0)
+                {
+                    return new SmimeVerifyResult
+                    {
+                        IsValid = false,
+                        ErrorMessage = "Signed message contains no signer information."
+                    };
+                }
+
                 var signerCert = signedCms.SignerInfos[0].Certificate;
                 return new SmimeVerifyResult
                 {
@@ -71,14 +80,29 @@ namespace Parcl.Core.Crypto
             return envelopedCms.Encode();
         }
 
-        public byte[] Decrypt(byte[] encryptedData)
+        public SmimeDecryptResult Decrypt(byte[] encryptedData)
         {
-            var envelopedCms = new EnvelopedCms();
-            envelopedCms.Decode(encryptedData);
+            try
+            {
+                var envelopedCms = new EnvelopedCms();
+                envelopedCms.Decode(encryptedData);
 
-            // Decrypt uses the current user's certificate store automatically
-            envelopedCms.Decrypt();
-            return envelopedCms.ContentInfo.Content;
+                // Decrypt uses the current user's certificate store automatically
+                envelopedCms.Decrypt();
+                return new SmimeDecryptResult
+                {
+                    Success = true,
+                    Content = envelopedCms.ContentInfo.Content
+                };
+            }
+            catch (CryptographicException ex)
+            {
+                return new SmimeDecryptResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Decryption failed: {ex.Message}"
+                };
+            }
         }
     }
 
@@ -87,6 +111,13 @@ namespace Parcl.Core.Crypto
         public bool IsValid { get; set; }
         public byte[]? Content { get; set; }
         public Models.CertificateInfo? SignerCertificate { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+
+    public class SmimeDecryptResult
+    {
+        public bool Success { get; set; }
+        public byte[]? Content { get; set; }
         public string? ErrorMessage { get; set; }
     }
 }

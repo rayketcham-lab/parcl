@@ -19,6 +19,8 @@ namespace Parcl.Addin.Dialogs
         private TextBox _ldapBaseDn = null!;
         private TextBox _ldapFilter = null!;
         private ComboBox _ldapAuth = null!;
+        private TextBox _ldapBindDn = null!;
+        private TextBox _ldapBindPassword = null!;
         private CheckBox _ldapSsl = null!;
 
         // Crypto controls
@@ -131,7 +133,7 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 6,
+                RowCount = 8,
                 Padding = new Padding(4)
             };
 
@@ -141,6 +143,8 @@ namespace Parcl.Addin.Dialogs
             _ldapFilter = new TextBox { Dock = DockStyle.Fill, Text = "(mail={0})" };
             _ldapAuth = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _ldapAuth.Items.AddRange(new object[] { "Anonymous", "Simple", "Negotiate (Kerberos)" });
+            _ldapBindDn = new TextBox { Dock = DockStyle.Fill };
+            _ldapBindPassword = new TextBox { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
             _ldapSsl = new CheckBox { Text = "Use SSL/TLS" };
 
             AddRow(detailPanel, 0, "Server:", _ldapServer);
@@ -148,7 +152,9 @@ namespace Parcl.Addin.Dialogs
             AddRow(detailPanel, 2, "Base DN:", _ldapBaseDn);
             AddRow(detailPanel, 3, "Search Filter:", _ldapFilter);
             AddRow(detailPanel, 4, "Authentication:", _ldapAuth);
-            detailPanel.Controls.Add(_ldapSsl, 1, 5);
+            AddRow(detailPanel, 5, "Bind DN:", _ldapBindDn);
+            AddRow(detailPanel, 6, "Bind Password:", _ldapBindPassword);
+            detailPanel.Controls.Add(_ldapSsl, 1, 7);
 
             splitContainer.Panel2.Controls.Add(detailPanel);
             tab.Controls.Add(splitContainer);
@@ -307,6 +313,8 @@ namespace Parcl.Addin.Dialogs
                 _ldapBaseDn.Text = dir.BaseDn;
                 _ldapFilter.Text = dir.SearchFilter;
                 _ldapAuth.SelectedIndex = (int)dir.AuthType;
+                _ldapBindDn.Text = dir.BindDn ?? string.Empty;
+                _ldapBindPassword.Text = dir.BindPassword ?? string.Empty;
                 _ldapSsl.Checked = dir.UseSsl;
             }
         }
@@ -321,6 +329,8 @@ namespace Parcl.Addin.Dialogs
                 BaseDn = _ldapBaseDn.Text,
                 SearchFilter = _ldapFilter.Text,
                 AuthType = (AuthType)(_ldapAuth.SelectedIndex >= 0 ? _ldapAuth.SelectedIndex : 2),
+                BindDn = string.IsNullOrWhiteSpace(_ldapBindDn.Text) ? null : _ldapBindDn.Text,
+                BindPassword = string.IsNullOrWhiteSpace(_ldapBindPassword.Text) ? null : _ldapBindPassword.Text,
                 UseSsl = _ldapSsl.Checked
             };
 

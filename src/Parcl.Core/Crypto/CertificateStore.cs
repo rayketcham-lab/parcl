@@ -64,9 +64,14 @@ namespace Parcl.Core.Crypto
             }
         }
 
-        public void ImportCertificate(byte[] certData)
+        public void ImportCertificate(byte[] certData, string? password = null)
         {
-            var cert = new X509Certificate2(certData);
+            var cert = password != null
+                ? new X509Certificate2(certData, password,
+                    X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet)
+                : new X509Certificate2(certData,
+                    (string?)null,
+                    X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
             try
             {
                 _personalStore.Open(OpenFlags.ReadWrite);

@@ -11,6 +11,7 @@ namespace Parcl.Core.Models
         public string CertAttribute { get; set; } = "userCertificate;binary";
         public AuthType AuthType { get; set; } = AuthType.Negotiate;
         public string? BindDn { get; set; }
+        public string? BindPassword { get; set; }
         public bool Enabled { get; set; } = true;
 
         public string ConnectionString =>
