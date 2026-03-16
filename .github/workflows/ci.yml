@@ -34,9 +34,6 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
       - name: Restore NuGet packages
         run: dotnet restore Parcl.sln
 
