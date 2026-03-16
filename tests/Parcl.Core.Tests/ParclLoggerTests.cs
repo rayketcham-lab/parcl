@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Threading;
 using Parcl.Core.Config;
 using Xunit;
 
@@ -20,27 +19,28 @@ namespace Parcl.Core.Tests
         [Fact]
         public void Logger_CreatesLogFile()
         {
+            string logPath;
             using (var logger = new ParclLogger())
             {
-                var logPath = logger.GetLogFilePath();
-                Assert.True(File.Exists(logPath), $"Log file should exist at {logPath}");
+                logPath = logger.GetLogFilePath();
             }
+            Assert.True(File.Exists(logPath), $"Log file should exist at {logPath}");
         }
 
         [Fact]
         public void Logger_WritesAllLevels()
         {
+            string logPath;
             using (var logger = new ParclLogger())
             {
                 logger.Debug("Test", "debug message");
                 logger.Info("Test", "info message");
                 logger.Warn("Test", "warn message");
                 logger.Error("Test", "error message");
+                logPath = logger.GetLogFilePath();
             }
-
-            // Logger flushes on dispose, read the file
-            var logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
-            var content = File.ReadAllText(logFile);
+            // Dispose flushes all buffered writes, safe to read now
+            var content = File.ReadAllText(logPath);
 
             Assert.Contains("[DEBUG]", content);
             Assert.Contains("[INFO ]", content);
@@ -53,19 +53,20 @@ namespace Parcl.Core.Tests
         [Fact]
         public void Logger_IncludesComponentName()
         {
+            string logPath;
             using (var logger = new ParclLogger())
             {
                 logger.Info("LDAP", "test lookup");
+                logPath = logger.GetLogFilePath();
             }
-
-            var logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
-            var content = File.ReadAllText(logFile);
+            var content = File.ReadAllText(logPath);
             Assert.Contains("[LDAP", content);
         }
 
         [Fact]
         public void Logger_ErrorWithException_IncludesExceptionType()
         {
+            string logPath;
             using (var logger = new ParclLogger())
             {
                 try
@@ -76,10 +77,9 @@ namespace Parcl.Core.Tests
                 {
                     logger.Error("Test", "operation failed", ex);
                 }
+                logPath = logger.GetLogFilePath();
             }
-
-            var logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
-            var content = File.ReadAllText(logFile);
+            var content = File.ReadAllText(logPath);
             Assert.Contains("InvalidOperationException", content);
             Assert.Contains("test failure", content);
         }
@@ -87,28 +87,34 @@ namespace Parcl.Core.Tests
         [Fact]
         public void Logger_RespectsMinLevel()
         {
-            var logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
-
-            // Delete existing to start clean
-            if (File.Exists(logFile)) File.Delete(logFile);
-
+            // Use a unique temp log to avoid cross-test contamination
+            string logPath;
             using (var logger = new ParclLogger(LogLevel.Warn))
             {
-                logger.Debug("Test", "should not appear");
-                logger.Info("Test", "should not appear either");
-                logger.Warn("Test", "this should appear");
-                logger.Error("Test", "this too");
+                logger.Debug("Test", "filtered-debug-should-not-appear");
+                logger.Info("Test", "filtered-info-should-not-appear");
+                logger.Warn("Test", "this-warn-should-appear");
+                logger.Error("Test", "this-error-should-appear");
+                logPath = logger.GetLogFilePath();
             }
-
-            var content = File.ReadAllText(logFile);
-            Assert.DoesNotContain("should not appear", content);
-            Assert.Contains("this should appear", content);
-            Assert.Contains("this too", content);
+            var content = File.ReadAllText(logPath);
+            Assert.DoesNotContain("filtered-debug-should-not-appear", content);
+            Assert.DoesNotContain("filtered-info-should-not-appear", content);
+            Assert.Contains("this-warn-should-appear", content);
+            Assert.Contains("this-error-should-appear", content);
         }
 
-        public void Dispose()
+        [Fact]
+        public void Logger_GetLogFilePath_ContainsDate()
         {
-            // Clean up test logs
+            using (var logger = new ParclLogger())
+            {
+                var path = logger.GetLogFilePath();
+                Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"), path);
+                Assert.EndsWith(".log", path);
+            }
         }
+
+        public void Dispose() { }
     }
 }
