@@ -24,6 +24,33 @@ namespace Parcl.Addin
             return GetResourceText("Parcl.Addin.ParclRibbon.xml");
         }
 
+        /// <summary>
+        /// Controls Parcl tab visibility. Only visible in Mail view, not Calendar/People/Tasks.
+        /// </summary>
+        public bool GetParclTabVisible(IRibbonControl control)
+        {
+            try
+            {
+                if (control.Context is Outlook.Explorer explorer)
+                {
+                    var folder = explorer.CurrentFolder;
+                    if (folder != null)
+                    {
+                        // Show Parcl tab only in mail-related folders
+                        var folderType = folder.DefaultItemType;
+                        return folderType == Outlook.OlItemType.olMailItem;
+                    }
+                }
+
+                // Always show in inspector windows (compose/read)
+                if (control.Context is Outlook.Inspector)
+                    return true;
+            }
+            catch { }
+
+            return false;
+        }
+
         public void Ribbon_Load(IRibbonUI ribbonUI)
         {
             _ribbon = ribbonUI;

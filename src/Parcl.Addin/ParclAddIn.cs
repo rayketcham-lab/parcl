@@ -86,7 +86,10 @@ namespace Parcl.Addin
                 // so toggle button states (Encrypt/Sign) reflect the selected message
                 var explorer = _application.ActiveExplorer();
                 if (explorer != null)
+                {
                     explorer.SelectionChange += Explorer_SelectionChange;
+                    explorer.FolderSwitch += Explorer_FolderSwitch;
+                }
 
                 // Also catch new inspectors (opened messages)
                 _application.Inspectors.NewInspector += Inspectors_NewInspector;
@@ -118,6 +121,13 @@ namespace Parcl.Addin
         private void Explorer_SelectionChange()
         {
             // Ribbon toggle states (Encrypt/Sign) must reflect the SELECTED message
+            try { _ribbon?.Invalidate(); }
+            catch { }
+        }
+
+        private void Explorer_FolderSwitch()
+        {
+            // Hide/show Parcl tab when switching between Mail/Calendar/People
             try { _ribbon?.Invalidate(); }
             catch { }
         }

@@ -4,7 +4,7 @@
           loadImage="GetButtonImage">
   <ribbon>
     <tabs>
-      <tab id="ParclTab" label="Parcl" insertAfterMso="TabMail">
+      <tab id="ParclTab" label="Parcl" insertAfterMso="TabMail" getVisible="GetParclTabVisible">
         <group id="grpSecurity" label="Security">
           <toggleButton id="btnEncrypt"
                         label="Encrypt"
