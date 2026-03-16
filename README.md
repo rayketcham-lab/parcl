@@ -6,9 +6,9 @@
 [![Security](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Parcl is a Microsoft Outlook COM add-in that provides end-to-end S/MIME email security — encryption, digital signatures, and certificate management — directly from the Outlook ribbon. It handles the entire certificate lifecycle: discovery via LDAP and Outlook contacts, import from received emails, and application of RFC 5751 S/MIME cryptographic operations.
+Parcl is a Microsoft Outlook COM add-in that provides end-to-end S/MIME email security — encryption, digital signatures, and certificate management — directly from the Outlook ribbon. Pure COM add-in — no VSTO runtime required. It handles the entire certificate lifecycle: discovery via LDAP and Outlook contacts, import from received emails, and application of RFC 5751 S/MIME cryptographic operations.
 
-**Website**: [quantumnexum.com](https://quantumnexum.com) | **Support**: help@quantumnexum.com
+[Homepage](https://rayketcham-lab.github.io/parcl/) | [Releases](https://github.com/rayketcham-lab/parcl/releases) | [Issues](https://github.com/rayketcham-lab/parcl/issues) | [quantumnexum.com](https://quantumnexum.com) | Support: help@quantumnexum.com
 
 ---
 
@@ -53,12 +53,13 @@ Most S/MIME solutions either require server-side configuration (Exchange S/MIME 
 
 ### Security
 - **LDAP injection prevention** — RFC 4515 filter escaping on all inputs.
-- **DPAPI credential protection** — LDAP bind passwords encrypted at rest.
+- **DPAPI credential protection** — LDAP bind passwords encrypted at rest via `CredentialProtector`.
 - **Randomized temp files** — All temp paths use `Path.GetRandomFileName()`.
 - **MIME header sanitization** — Filenames stripped of CR/LF/NUL/quotes.
 - **LDAPS by default** — SSL enabled, port 636.
 - **No auto-import** — Every certificate import requires explicit user consent.
 - **Weak algo removal** — 3DES and SHA-1 removed per RFC 8551.
+- **Structured JSONL audit logging** with session correlation.
 
 ### Logging
 - **JSONL structured logging** — One JSON object per line: `ts`, `lvl`, `cmp`, `sid` (session ID), `pid`, `msg`, `err`.
@@ -102,22 +103,22 @@ Most S/MIME solutions either require server-side configuration (Exchange S/MIME 
 
 ```
 src/
-  Parcl.Addin/           # COM Add-in (IDTExtensibility2 + IRibbonExtensibility)
+  Parcl.Addin/           # Pure COM Add-in (IDTExtensibility2 + IRibbonExtensibility)
     Animations/           #   WPF animated controls (lock, shield, badge, spinner)
     Dialogs/              #   WinForms dialogs (options, cert selector, cert exchange, about)
-    TaskPane/             #   WPF task pane with ElementHost bridge
+    TaskPane/             #   WPF security dashboard with ElementHost bridge
     ParclAddIn.cs         #   Add-in lifecycle, ItemSend encryption, event hooks
     ParclAddIn.Ribbon.cs  #   Ribbon callbacks, toggle logic, cert resolution
     ParclRibbon.xml       #   Ribbon + context menu XML
     OfficeInterop.cs      #   Inline COM interface definitions (IRibbonUI, IRibbonControl)
-  Parcl.Core/            # Core library (no Outlook dependency)
-    Config/               #   Settings (JSON), Logger (JSONL), CredentialProtector (DPAPI)
+  Parcl.Core/            # Core library (zero Outlook dependency)
+    Config/               #   ParclSettings (JSON), ParclLogger (JSONL), CredentialProtector (DPAPI)
     Crypto/               #   SmimeHandler (CMS), CertificateStore (X509), MimeBuilder, CertExchange
     Ldap/                 #   LdapCertLookup (DirectoryServices), CertificateCache
     Models/               #   CertificateInfo, LdapDirectoryEntry, UserProfile
-  Parcl.Installer/       # WiX 6 per-user MSI (HKCU, no admin)
+  Parcl.Installer/       # WiX 6 per-user MSI (HKCU, no admin required)
 tests/
-  Parcl.Core.Tests/      # xUnit tests
+  Parcl.Core.Tests/      # xUnit tests for the core library
 ```
 
 **Stack**: .NET Framework 4.8 | COM Add-in (IDTExtensibility2) | WPF + WinForms | System.Security.Cryptography.Pkcs | System.DirectoryServices | WiX 6 | Newtonsoft.Json
