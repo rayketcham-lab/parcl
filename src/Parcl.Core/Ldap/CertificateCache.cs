@@ -79,30 +79,42 @@ namespace Parcl.Core.Ldap
                 _cache.TryRemove(key, out _);
         }
 
+        private readonly object _fileLock = new object();
+
         private void Load()
         {
             if (!File.Exists(_cacheFile)) return;
-            try
+            lock (_fileLock)
             {
-                var json = File.ReadAllText(_cacheFile);
-                var entries = JsonConvert.DeserializeObject<List<CachedEntry>>(json);
-                if (entries == null) return;
-                foreach (var entry in entries)
-                    _cache.TryAdd(entry.Email, entry);
+                try
+                {
+                    using var fs = new FileStream(_cacheFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    using var reader = new StreamReader(fs);
+                    var json = reader.ReadToEnd();
+                    var entries = JsonConvert.DeserializeObject<List<CachedEntry>>(json);
+                    if (entries == null) return;
+                    foreach (var entry in entries)
+                        _cache.TryAdd(entry.Email, entry);
+                }
+                catch { }
             }
-            catch { }
         }
 
         private void Save()
         {
-            try
+            lock (_fileLock)
             {
-                var dir = Path.GetDirectoryName(_cacheFile)!;
-                Directory.CreateDirectory(dir);
-                var json = JsonConvert.SerializeObject(_cache.Values.ToList(), Formatting.Indented);
-                File.WriteAllText(_cacheFile, json);
+                try
+                {
+                    var dir = Path.GetDirectoryName(_cacheFile)!;
+                    Directory.CreateDirectory(dir);
+                    var json = JsonConvert.SerializeObject(_cache.Values.ToList(), Formatting.Indented);
+                    using var fs = new FileStream(_cacheFile, FileMode.Create, FileAccess.Write, FileShare.None);
+                    using var writer = new StreamWriter(fs);
+                    writer.Write(json);
+                }
+                catch { }
             }
-            catch { }
         }
 
         private class CachedEntry

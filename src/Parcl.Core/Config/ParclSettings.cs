@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json;
 using Parcl.Core.Models;
@@ -26,6 +27,12 @@ namespace Parcl.Core.Config
                 return CreateDefault();
 
             var json = File.ReadAllText(SettingsFile);
+
+            if (!SettingsIntegrity.VerifyHmac(json, out var failureReason))
+            {
+                Trace.TraceWarning($"[Parcl.Settings] {failureReason}");
+            }
+
             return JsonConvert.DeserializeObject<ParclSettings>(json) ?? CreateDefault();
         }
 
@@ -34,6 +41,7 @@ namespace Parcl.Core.Config
             Directory.CreateDirectory(SettingsDir);
             var json = JsonConvert.SerializeObject(this, Formatting.Indented);
             File.WriteAllText(SettingsFile, json);
+            SettingsIntegrity.WriteHmac(json);
         }
 
         public void Reload()

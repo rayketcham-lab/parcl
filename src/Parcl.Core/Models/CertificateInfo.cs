@@ -14,6 +14,11 @@ namespace Parcl.Core.Models
         public string SerialNumber { get; set; } = string.Empty;
         public X509KeyUsageFlags KeyUsage { get; set; }
         public bool HasPrivateKey { get; set; }
+        /// <summary>
+        /// Raw certificate bytes. Excluded from JSON serialization to avoid
+        /// persisting sensitive cert data in cache files.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
         public byte[]? RawData { get; set; }
 
         public bool IsExpired => DateTime.UtcNow > NotAfter;

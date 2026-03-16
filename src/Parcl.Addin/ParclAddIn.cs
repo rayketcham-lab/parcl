@@ -55,7 +55,9 @@ namespace Parcl.Addin
                     $"Settings loaded — {Settings.LdapDirectories.Count} LDAP directories configured");
 
                 CertStore = new CertificateStore();
-                SmimeHandler = new SmimeHandler();
+                SmimeHandler = new SmimeHandler(
+                    Settings.Crypto.EncryptionAlgorithm,
+                    Settings.Crypto.HashAlgorithm);
                 LdapLookup = new LdapCertLookup(Logger);
                 CertCache = new CertificateCache(
                     Settings.Cache.CacheExpirationHours,
