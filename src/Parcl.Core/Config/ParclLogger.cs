@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Threading;
 
 namespace Parcl.Core.Config
 {
@@ -22,9 +20,8 @@ namespace Parcl.Core.Config
 
         private readonly LogLevel _minLevel;
         private readonly StreamWriter _writer;
-        private readonly ConcurrentQueue<string> _buffer = new ConcurrentQueue<string>();
-        private readonly Timer _flushTimer;
         private readonly string _logFile;
+        private readonly object _lock = new object();
         private bool _disposed;
 
         public ParclLogger(LogLevel minLevel = LogLevel.Debug)
@@ -35,13 +32,9 @@ namespace Parcl.Core.Config
             CleanOldLogs(maxAgeDays: 7);
 
             _logFile = Path.Combine(LogDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
-            _writer = new StreamWriter(_logFile, append: true, Encoding.UTF8)
-            {
-                AutoFlush = false
-            };
-
-            // Flush every 2 seconds to avoid I/O thrashing
-            _flushTimer = new Timer(_ => Flush(), null, 2000, 2000);
+            _writer = new StreamWriter(
+                new FileStream(_logFile, FileMode.Append, FileAccess.Write, FileShare.Read),
+                Encoding.UTF8);
 
             Info("Logger", $"Session started — level={_minLevel}, pid={System.Diagnostics.Process.GetCurrentProcess().Id}");
         }
@@ -90,30 +83,16 @@ namespace Parcl.Core.Config
         {
             if (level < _minLevel || _disposed) return;
 
-            // Format: 2026-03-16T14:30:45.123 [INFO ] [LDAP    ] Found 2 certs for user@example.com
             var timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture);
             var lvl = level.ToString().ToUpper().PadRight(5);
             var comp = component.PadRight(8);
             var line = $"{timestamp} [{lvl}] [{comp}] {message}";
 
-            _buffer.Enqueue(line);
-        }
-
-        private void Flush()
-        {
-            if (_disposed) return;
-
-            try
+            lock (_lock)
             {
-                while (_buffer.TryDequeue(out var line))
-                {
-                    _writer.WriteLine(line);
-                }
+                if (_disposed) return;
+                _writer.WriteLine(line);
                 _writer.Flush();
-            }
-            catch
-            {
-                // Can't log a logging failure — just drop it
             }
         }
 
@@ -125,31 +104,28 @@ namespace Parcl.Core.Config
                 foreach (var file in Directory.GetFiles(LogDir, "parcl-*.log"))
                 {
                     if (File.GetCreationTime(file) < cutoff)
-                    {
                         File.Delete(file);
-                    }
                 }
             }
-            catch
-            {
-                // Non-critical — old logs stay a bit longer
-            }
+            catch { }
         }
 
-        /// <summary>
-        /// Returns the path to today's log file for user troubleshooting.
-        /// </summary>
         public string GetLogFilePath() => _logFile;
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
+            lock (_lock)
+            {
+                if (_disposed) return;
 
-            Info("Logger", "Session ending — flushing logs");
-            _flushTimer?.Dispose();
-            Flush();
-            _writer?.Dispose();
+                // Write final message directly (bypassing _disposed check)
+                var timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture);
+                _writer.WriteLine($"{timestamp} [INFO ] [Logger  ] Session ending");
+
+                _disposed = true;
+                _writer.Flush();
+                _writer.Dispose();
+            }
         }
     }
 }
