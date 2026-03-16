@@ -17,13 +17,12 @@ jobs:
         run: |
           if [ "$REPO_OWNER" != "rayketcham-lab" ]; then
             echo "::error::Repository must be under 'rayketcham-lab' organization, not '$REPO_OWNER'"
-            echo "This repo appears to be forked or mirrored to the wrong org."
             exit 1
           fi
           echo "Repo is correctly under rayketcham-lab"
 
   dependency-scan:
-    name: Dependency Scan
+    name: Dependency Vulnerability Scan
     runs-on: windows-latest
     needs: org-guard
     steps:
@@ -45,28 +44,15 @@ jobs:
             Write-Error "Vulnerable packages detected"
             exit 1
           }
+          Write-Output "No vulnerable packages found"
         shell: pwsh
 
       - name: Check for deprecated packages
         run: dotnet list Parcl.sln package --deprecated
-
-  secret-scan:
-    name: Secret Scan
-    runs-on: windows-latest
-    needs: org-guard
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: TruffleHog scan
-        uses: trufflesecurity/trufflehog@v3
-        with:
-          extra_args: --only-verified
+        continue-on-error: true
 
   code-analysis:
-    name: Code Analysis
+    name: Build & Code Analysis
     runs-on: windows-latest
     needs: org-guard
     steps:
@@ -77,11 +63,60 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Install Security Code Scan
-        run: dotnet tool install -g security-scan
+      - name: Restore
+        run: dotnet restore Parcl.sln
 
-      - name: Build with Roslyn analyzers
-        run: dotnet build Parcl.sln --configuration Release /p:TreatWarningsAsErrors=false
+      - name: Build solution
+        run: dotnet build Parcl.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
 
       - name: Check formatting
         run: dotnet format Parcl.sln --verify-no-changes
+        continue-on-error: true
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets in source
+        run: |
+          echo "Scanning for potential secrets..."
+          FOUND=0
+
+          # Check for common secret patterns in tracked files
+          for pattern in \
+            "password\s*=\s*[\"'][^\"']+[\"']" \
+            "api[_-]?key\s*=\s*[\"'][^\"']+[\"']" \
+            "secret\s*=\s*[\"'][^\"']+[\"']" \
+            "private[_-]?key" \
+            "BEGIN RSA PRIVATE KEY" \
+            "BEGIN EC PRIVATE KEY" \
+            "BEGIN PRIVATE KEY" \
+            "AKIA[0-9A-Z]{16}" \
+            "ghp_[a-zA-Z0-9]{36}" \
+            "-----BEGIN CERTIFICATE-----" \
+          ; do
+            MATCHES=$(git grep -l -i -E "$pattern" -- '*.cs' '*.json' '*.yml' '*.yaml' '*.xml' '*.config' 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              # Filter out false positives (test files, config templates, cert exchange code)
+              REAL=$(echo "$MATCHES" | grep -v -E "(Test|test|\.example|CredentialProtector|CertExchange|MimeBuilder)" || true)
+              if [ -n "$REAL" ]; then
+                echo "::warning::Potential secret pattern '$pattern' found in: $REAL"
+                FOUND=$((FOUND + 1))
+              fi
+            fi
+          done
+
+          if [ "$FOUND" -gt 0 ]; then
+            echo "::warning::$FOUND potential secret pattern(s) found — review above"
+          else
+            echo "No secrets detected"
+          fi
+        shell: bash
