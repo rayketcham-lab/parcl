@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.9.0</Version>
+    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    <FileVersion>0.9.0.0</FileVersion>
+    <InformationalVersion>0.9.0-beta</InformationalVersion>
+    <Company>Quantum Nexum</Company>
+    <Product>Parcl - S/MIME Certificate Manager for Outlook</Product>
+    <Copyright>Copyright © 2026 Quantum Nexum. All rights reserved.</Copyright>
+  </PropertyGroup>
+</Project>
