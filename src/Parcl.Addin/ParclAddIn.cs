@@ -82,9 +82,16 @@ namespace Parcl.Addin
                 // Always hook ItemSend — handles encrypt encapsulation and auto-sign/encrypt
                 _application.ItemSend += Application_ItemSend;
 
-                // Auto-import certificates from viewed messages
-                _application.ItemLoad += Application_ItemLoad;
-                Logger.Debug("AddIn", "Certificate auto-import on view enabled");
+                // Invalidate ribbon when user selects a different message
+                // so toggle button states (Encrypt/Sign) reflect the selected message
+                var explorer = _application.ActiveExplorer();
+                if (explorer != null)
+                    explorer.SelectionChange += Explorer_SelectionChange;
+
+                // Also catch new inspectors (opened messages)
+                _application.Inspectors.NewInspector += Inspectors_NewInspector;
+
+                Logger.Debug("AddIn", "Ribbon selection tracking enabled");
 
                 Logger.Info("AddIn", "Parcl add-in started successfully");
             }
@@ -107,6 +114,24 @@ namespace Parcl.Addin
         public void OnAddInsUpdate(ref Array custom) { }
         public void OnStartupComplete(ref Array custom) { }
         public void OnBeginShutdown(ref Array custom) { }
+
+        private void Explorer_SelectionChange()
+        {
+            // Ribbon toggle states (Encrypt/Sign) must reflect the SELECTED message
+            try { _ribbon?.Invalidate(); }
+            catch { }
+        }
+
+        private void Inspectors_NewInspector(Outlook.Inspector inspector)
+        {
+            // When a message is opened in its own window, refresh ribbon state
+            try
+            {
+                inspector.Activate();
+                _ribbon?.Invalidate();
+            }
+            catch { }
+        }
 
         internal void ToggleTaskPane()
         {
@@ -136,35 +161,40 @@ namespace Parcl.Addin
 
             try
             {
-                // ── Signing (Outlook-native via PR_SECURITY_FLAGS) ──
-                const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
-                const int SECFLAG_SIGNED = 0x02;
+                // ── Signing (deferred from compose toggle or auto-sign) ──
+                bool shouldSign = false;
 
-                var pa = mail.PropertyAccessor;
-                int flags;
-                try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
-                catch { flags = 0; }
+                // Check if user toggled Sign on this message
+                var signFlag = mail.UserProperties.Find("ParclSign");
+                if (signFlag != null && (bool)signFlag.Value)
+                    shouldSign = true;
 
+                // Check auto-sign setting
                 if (Settings.Crypto.AlwaysSign &&
                     !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
                 {
                     var signingCert = CertStore.FindByThumbprint(
                         Settings.UserProfile.SigningCertThumbprint!);
-
                     if (signingCert != null && signingCert.HasPrivateKey)
-                    {
-                        flags |= SECFLAG_SIGNED;
-                        Logger.Info("Send", "Auto-sign: S/MIME signature flag set");
-                    }
+                        shouldSign = true;
                     else
-                    {
                         Logger.Warn("Send",
                             "Signing certificate not found or has no private key — skipping");
-                    }
                 }
 
-                if (flags != 0)
-                    pa.SetProperty(PR_SECURITY_FLAGS, flags);
+                if (shouldSign)
+                {
+                    const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                    const int SECFLAG_SIGNED = 0x02;
+
+                    var pa = mail.PropertyAccessor;
+                    int flags;
+                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                    catch { flags = 0; }
+
+                    pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
+                    Logger.Info("Send", "S/MIME signature flag applied at send time");
+                }
 
                 // ── Encryption (Parcl encapsulation at send time) ──
                 bool shouldEncrypt = false;
@@ -322,41 +352,6 @@ namespace Parcl.Addin
             return true;
         }
 
-        private void Application_ItemLoad(object item)
-        {
-            // When a mail item loads, check for certificate attachments and auto-import
-            if (!(item is Outlook.MailItem mail)) return;
-            if (!mail.Sent) return; // Only process received messages
-
-            try
-            {
-                if (mail.Attachments.Count == 0) return;
-
-                var certExtensions = new[] { ".cer", ".pem", ".crt", ".der", ".p7c" };
-                bool hasCertAttachment = false;
-                for (int i = 1; i <= mail.Attachments.Count; i++)
-                {
-                    var ext = System.IO.Path.GetExtension(mail.Attachments[i].FileName)?.ToLowerInvariant();
-                    if (ext != null && certExtensions.Contains(ext))
-                    {
-                        hasCertAttachment = true;
-                        break;
-                    }
-                }
-
-                if (!hasCertAttachment) return;
-
-                var count = ImportCertificateAttachments(mail);
-                if (count > 0)
-                {
-                    Logger.Info("Import",
-                        $"Auto-imported {count} certificate(s) from message by {mail.SenderEmailAddress}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Debug("Import", $"Auto-import skipped: {ex.Message}");
-            }
-        }
+        // Certificate import is now manual-only via the "Import Certificates" ribbon button.
     }
 }

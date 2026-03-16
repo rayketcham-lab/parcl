@@ -66,6 +66,20 @@ namespace Parcl.Core.Crypto
             if (recipientCerts.Count == 0)
                 throw new ArgumentException("At least one recipient certificate is required.");
 
+            // Validate each recipient certificate chain before encrypting
+            using (var certStore = new CertificateStore())
+            {
+                foreach (X509Certificate2 cert in recipientCerts)
+                {
+                    var chainResult = certStore.ValidateCertificateChain(cert);
+                    if (!chainResult.IsValid)
+                    {
+                        throw new CryptographicException(
+                            $"Certificate chain validation failed for '{cert.Subject}': {chainResult.ErrorMessage}");
+                    }
+                }
+            }
+
             var contentInfo = new ContentInfo(content);
             var envelopedCms = new EnvelopedCms(contentInfo,
                 new AlgorithmIdentifier(new Oid("2.16.840.1.101.3.4.1.42"))); // AES-256-CBC

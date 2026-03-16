@@ -138,14 +138,14 @@ namespace Parcl.Addin.Dialogs
             };
 
             _ldapServer = new TextBox { Dock = DockStyle.Fill };
-            _ldapPort = new TextBox { Dock = DockStyle.Fill, Text = "389" };
+            _ldapPort = new TextBox { Dock = DockStyle.Fill, Text = "636" };
             _ldapBaseDn = new TextBox { Dock = DockStyle.Fill };
             _ldapFilter = new TextBox { Dock = DockStyle.Fill, Text = "(mail={0})" };
             _ldapAuth = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _ldapAuth.Items.AddRange(new object[] { "Anonymous", "Simple", "Negotiate (Kerberos)" });
             _ldapBindDn = new TextBox { Dock = DockStyle.Fill };
             _ldapBindPassword = new TextBox { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
-            _ldapSsl = new CheckBox { Text = "Use SSL/TLS" };
+            _ldapSsl = new CheckBox { Text = "Use SSL/TLS", Checked = true };
 
             AddRow(detailPanel, 0, "Server:", _ldapServer);
             AddRow(detailPanel, 1, "Port:", _ldapPort);
@@ -314,7 +314,7 @@ namespace Parcl.Addin.Dialogs
                 _ldapFilter.Text = dir.SearchFilter;
                 _ldapAuth.SelectedIndex = (int)dir.AuthType;
                 _ldapBindDn.Text = dir.BindDn ?? string.Empty;
-                _ldapBindPassword.Text = dir.BindPassword ?? string.Empty;
+                _ldapBindPassword.Text = dir.GetBindPassword();
                 _ldapSsl.Checked = dir.UseSsl;
             }
         }
@@ -325,14 +325,17 @@ namespace Parcl.Addin.Dialogs
             {
                 Name = "New Directory",
                 Server = _ldapServer.Text,
-                Port = int.TryParse(_ldapPort.Text, out var p) ? p : 389,
+                Port = int.TryParse(_ldapPort.Text, out var p) ? p : 636,
                 BaseDn = _ldapBaseDn.Text,
                 SearchFilter = _ldapFilter.Text,
                 AuthType = (AuthType)(_ldapAuth.SelectedIndex >= 0 ? _ldapAuth.SelectedIndex : 2),
                 BindDn = string.IsNullOrWhiteSpace(_ldapBindDn.Text) ? null : _ldapBindDn.Text,
-                BindPassword = string.IsNullOrWhiteSpace(_ldapBindPassword.Text) ? null : _ldapBindPassword.Text,
+                BindPassword = null,
                 UseSsl = _ldapSsl.Checked
             };
+
+            if (!string.IsNullOrWhiteSpace(_ldapBindPassword.Text))
+                dir.SetBindPassword(_ldapBindPassword.Text);
 
             _settings.LdapDirectories.Add(dir);
             var item = new ListViewItem(new[]

@@ -45,6 +45,13 @@
                   size="large"
                   image="btnCertSelector"
                   onAction="OnCertSelectorClick" />
+          <button id="btnImportCerts"
+                  label="Import Certificates"
+                  screentip="Import certificate attachments"
+                  supertip="Import certificate attachments from the current message into your certificate store."
+                  size="normal"
+                  image="btnCertExchange"
+                  onAction="OnImportCertificatesClick" />
           <button id="btnLookup"
                   label="Lookup"
                   screentip="Lookup recipient certificates"

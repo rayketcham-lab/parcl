@@ -149,7 +149,26 @@ namespace Parcl.Addin
             {
                 Outlook.MailItem? mail = GetMailItemSafe(control);
                 if (mail == null) return false;
-                return (GetSecurityFlags(mail.PropertyAccessor) & SECFLAG_SIGNED) != 0;
+
+                // Check our user property flag (compose mode)
+                var flag = mail.UserProperties.Find("ParclSign");
+                if (flag != null && (bool)flag.Value)
+                    return true;
+
+                // Check Outlook-native S/MIME signed flag (received/sent messages)
+                if ((GetSecurityFlags(mail.PropertyAccessor) & SECFLAG_SIGNED) != 0)
+                    return true;
+
+                // Check message class for signed messages
+                try
+                {
+                    if (mail.MessageClass == "IPM.Note.SMIME.MultipartSigned" ||
+                        mail.MessageClass == "IPM.Note.SMIME")
+                        return true;
+                }
+                catch { }
+
+                return false;
             }
             catch { return false; }
         }
@@ -501,6 +520,10 @@ namespace Parcl.Addin
             Logger.Info("Encrypt", "Message flagged for S/MIME encryption on send");
         }
 
+        /// <summary>
+        /// Marks a compose message for signing. Validated at toggle time,
+        /// actual PR_SECURITY_FLAGS set at send time in Application_ItemSend.
+        /// </summary>
         private void SignOutgoing(Outlook.MailItem mail)
         {
             var thumbprint = Settings.UserProfile.SigningCertThumbprint;
@@ -529,15 +552,13 @@ namespace Parcl.Addin
                 return;
             }
 
+            // Set user property flag — actual signing happens at send time
+            var flag = mail.UserProperties.Find("ParclSign") ??
+                       mail.UserProperties.Add("ParclSign", Outlook.OlUserPropertyType.olYesNo, false);
+            flag.Value = true;
+
             Logger.Info("Sign",
-                $"Signing with cert {thumbprint!.Substring(0, 8)}, " +
-                $"subject: {Truncate(mail.Subject, 30)}");
-
-            var pa = mail.PropertyAccessor;
-            int flags = GetSecurityFlags(pa);
-            pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
-
-            Logger.Info("Sign", "S/MIME digital signature enabled on message");
+                $"Message flagged for S/MIME signing with cert {thumbprint!.Substring(0, 8)}");
         }
 
         private void EncryptAtRest(Outlook.MailItem mail)
@@ -597,7 +618,6 @@ namespace Parcl.Addin
         {
             if (flag == SECFLAG_ENCRYPTED)
             {
-                // Clear our encrypt flag
                 var prop = mail.UserProperties.Find("ParclEncrypt");
                 if (prop != null)
                     prop.Value = false;
@@ -606,13 +626,10 @@ namespace Parcl.Addin
 
             if (flag == SECFLAG_SIGNED)
             {
-                var pa = mail.PropertyAccessor;
-                int flags = GetSecurityFlags(pa);
-                if ((flags & SECFLAG_SIGNED) != 0)
-                {
-                    pa.SetProperty(PR_SECURITY_FLAGS, flags & ~SECFLAG_SIGNED);
-                    Logger.Info(component, "S/MIME signature removed from message");
-                }
+                var prop = mail.UserProperties.Find("ParclSign");
+                if (prop != null)
+                    prop.Value = false;
+                Logger.Info(component, "Signing removed from message");
             }
         }
 
@@ -796,12 +813,46 @@ namespace Parcl.Addin
             }
         }
 
-        // ── Auto-import certificate attachments ─────────────────────────────
+        // ── Import Certificates (ribbon button — manual only) ─────────────
+
+        public void OnImportCertificatesClick(IRibbonControl control)
+        {
+            try
+            {
+                Outlook.MailItem? mail = GetMailItem(control);
+                if (mail == null || !mail.Sent)
+                {
+                    Logger.Warn("Import", "Import clicked but no received mail item found");
+                    return;
+                }
+
+                int count = ImportCertificateAttachments(mail);
+                if (count > 0)
+                {
+                    MessageBox.Show(
+                        $"Imported {count} certificate(s) from this message.",
+                        "Parcl — Import Certificates",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "No certificate attachments found in this message.",
+                        "Parcl — Import Certificates",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Import", "Certificate import failed", ex);
+                MessageBox.Show($"Import error: {ex.Message}", "Parcl",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
 
         /// <summary>
         /// Scans a received message for certificate attachments (.cer, .pem, .crt, .der, .p7c)
-        /// and imports them into the AddressBook store, keyed to the sender.
-        /// Call this when viewing a message to auto-cache sender certificates.
+        /// and imports them into the AddressBook store after prompting the user for consent.
         /// </summary>
         internal int ImportCertificateAttachments(Outlook.MailItem mail)
         {
@@ -815,7 +866,7 @@ namespace Parcl.Addin
                 if (ext == null || !certExtensions.Contains(ext))
                     continue;
 
-                var tempPath = Path.Combine(Path.GetTempPath(), $"parcl-import-{i}{ext}");
+                var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ext);
                 try
                 {
                     att.SaveAsFile(tempPath);
@@ -844,11 +895,29 @@ namespace Parcl.Addin
                         continue;
                     }
 
+                    var info = Parcl.Core.Models.CertificateInfo.FromX509(cert);
+
+                    // Prompt user before importing each certificate
+                    var prompt = MessageBox.Show(
+                        $"Import this certificate?\n\n" +
+                        $"Subject: {info.Subject}\n" +
+                        $"Issuer: {info.Issuer}\n" +
+                        $"Thumbprint: {info.Thumbprint}\n" +
+                        $"Valid: {cert.NotBefore:d} — {cert.NotAfter:d}",
+                        "Parcl — Confirm Certificate Import",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+
+                    if (prompt != DialogResult.Yes)
+                    {
+                        Logger.Debug("Import", $"User declined import of {info.Subject}");
+                        continue;
+                    }
+
                     // Import to AddressBook store (Other People)
                     CertStore.PublishToAddressBook(cert);
                     imported++;
 
-                    var info = Parcl.Core.Models.CertificateInfo.FromX509(cert);
                     Logger.Info("Import",
                         $"Certificate imported from attachment: {info.Subject} " +
                         $"[{info.Thumbprint.Substring(0, 8)}] from {mail.SenderEmailAddress}");

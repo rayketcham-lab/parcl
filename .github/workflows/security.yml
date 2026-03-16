@@ -1,0 +1,87 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  org-guard:
+    name: Verify Repository Organization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure repo is under rayketcham-lab
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO_OWNER" != "rayketcham-lab" ]; then
+            echo "::error::Repository must be under 'rayketcham-lab' organization, not '$REPO_OWNER'"
+            echo "This repo appears to be forked or mirrored to the wrong org."
+            exit 1
+          fi
+          echo "Repo is correctly under rayketcham-lab"
+
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet packages
+        run: dotnet restore Parcl.sln
+
+      - name: Check for vulnerable packages
+        run: |
+          $output = dotnet list Parcl.sln package --vulnerable --include-transitive
+          Write-Output $output
+          if ($output -match "has the following vulnerable packages") {
+            Write-Error "Vulnerable packages detected"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Check for deprecated packages
+        run: dotnet list Parcl.sln package --deprecated
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: windows-latest
+    needs: org-guard
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@v3
+        with:
+          extra_args: --only-verified
+
+  code-analysis:
+    name: Code Analysis
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Security Code Scan
+        run: dotnet tool install -g security-scan
+
+      - name: Build with Roslyn analyzers
+        run: dotnet build Parcl.sln --configuration Release /p:TreatWarningsAsErrors=false
+
+      - name: Check formatting
+        run: dotnet format Parcl.sln --verify-no-changes

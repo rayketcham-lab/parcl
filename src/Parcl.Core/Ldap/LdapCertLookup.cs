@@ -24,10 +24,34 @@ namespace Parcl.Core.Ldap
             return Task.Run(() => LookupByEmail(email, directory));
         }
 
+        /// <summary>
+        /// Escapes special characters in an LDAP filter value per RFC 4515.
+        /// </summary>
+        public static string EscapeLdapFilter(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return value;
+
+            var sb = new System.Text.StringBuilder(value.Length + 10);
+            foreach (char c in value)
+            {
+                switch (c)
+                {
+                    case '\\': sb.Append("\\5c"); break;
+                    case '*':  sb.Append("\\2a"); break;
+                    case '(':  sb.Append("\\28"); break;
+                    case ')':  sb.Append("\\29"); break;
+                    case '\0': sb.Append("\\00"); break;
+                    default:   sb.Append(c); break;
+                }
+            }
+            return sb.ToString();
+        }
+
         public List<CertificateInfo> LookupByEmail(string email, LdapDirectoryEntry directory)
         {
             var results = new List<CertificateInfo>();
-            var filter = string.Format(directory.SearchFilter, email);
+            var filter = string.Format(directory.SearchFilter, EscapeLdapFilter(email));
             var ldapPath = $"LDAP://{directory.Server}:{directory.Port}/{directory.BaseDn}";
 
             using (var entry = CreateDirectoryEntry(ldapPath, directory))
@@ -123,7 +147,7 @@ namespace Parcl.Core.Ldap
                     if (config.BindDn != null)
                     {
                         entry.Username = config.BindDn;
-                        entry.Password = config.BindPassword ?? string.Empty;
+                        entry.Password = config.GetBindPassword();
                     }
                     break;
                 case AuthType.Negotiate:

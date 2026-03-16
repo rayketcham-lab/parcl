@@ -30,8 +30,8 @@ namespace Parcl.Core.Tests
         {
             var entry = new LdapDirectoryEntry();
 
-            Assert.Equal(389, entry.Port);
-            Assert.False(entry.UseSsl);
+            Assert.Equal(636, entry.Port);
+            Assert.True(entry.UseSsl);
             Assert.Equal("(mail={0})", entry.SearchFilter);
             Assert.Equal("userCertificate;binary", entry.CertAttribute);
             Assert.Equal(AuthType.Negotiate, entry.AuthType);

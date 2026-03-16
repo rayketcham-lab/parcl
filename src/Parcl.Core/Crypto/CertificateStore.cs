@@ -70,7 +70,7 @@ namespace Parcl.Core.Crypto
 
                     // First try FindBySubjectName (matches CN in Subject DN)
                     var results = store.Certificates.Find(
-                        X509FindType.FindBySubjectName, email, false);
+                        X509FindType.FindBySubjectName, email, true);
                     var match = results.Cast<X509Certificate2>()
                         .Where(c => c.NotAfter > DateTime.UtcNow && c.NotBefore <= DateTime.UtcNow)
                         .OrderByDescending(c => c.NotAfter)
@@ -188,9 +188,44 @@ namespace Parcl.Core.Crypto
             return results.OrderByDescending(c => c.NotAfter).ToList();
         }
 
+        /// <summary>
+        /// Builds an X.509 chain with online revocation checking and returns the result.
+        /// </summary>
+        public ChainValidationResult ValidateCertificateChain(X509Certificate2 cert)
+        {
+            using (var chain = new X509Chain())
+            {
+                chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
+                chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+
+                bool isValid = chain.Build(cert);
+                if (isValid)
+                    return new ChainValidationResult { IsValid = true };
+
+                var errors = new System.Text.StringBuilder();
+                foreach (var status in chain.ChainStatus)
+                {
+                    errors.AppendLine(status.StatusInformation);
+                }
+
+                return new ChainValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = errors.ToString().TrimEnd()
+                };
+            }
+        }
+
         public void Dispose()
         {
             _personalStore?.Dispose();
         }
+    }
+
+    public class ChainValidationResult
+    {
+        public bool IsValid { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 }
