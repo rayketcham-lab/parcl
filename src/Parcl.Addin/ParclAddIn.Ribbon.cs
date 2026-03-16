@@ -84,11 +84,14 @@ namespace Parcl.Addin
                 if (flag != null && (bool)flag.Value)
                     return true;
 
-                // Check if already encapsulated (sent/received S/MIME)
+                // Check if message has a .p7m attachment (Parcl-encrypted)
                 try
                 {
-                    if (mail.MessageClass == "IPM.Note.SMIME")
-                        return true;
+                    for (int i = 1; i <= mail.Attachments.Count; i++)
+                    {
+                        if (mail.Attachments[i].FileName.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
                 }
                 catch { }
 

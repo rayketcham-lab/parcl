@@ -129,8 +129,116 @@ namespace Parcl.Addin
             {
                 inspector.Activate();
                 _ribbon?.Invalidate();
+
+                // Auto-decrypt if enabled
+                if (Settings.Behavior.AutoDecrypt)
+                {
+                    if (inspector.CurrentItem is Outlook.MailItem mail && mail.Sent)
+                    {
+                        TryAutoDecrypt(mail);
+                    }
+                }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Attempts to auto-decrypt a message if it has a .p7m attachment.
+        /// Silently skips if no encrypted content or if decryption fails.
+        /// </summary>
+        private void TryAutoDecrypt(Outlook.MailItem mail)
+        {
+            try
+            {
+                // Find .p7m attachment
+                Outlook.Attachment? p7m = null;
+                for (int i = 1; i <= mail.Attachments.Count; i++)
+                {
+                    if (mail.Attachments[i].FileName.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
+                    {
+                        p7m = mail.Attachments[i];
+                        break;
+                    }
+                }
+
+                if (p7m == null) return;
+
+                Logger.Info("AutoDecrypt", $"Auto-decrypting message: {mail.Subject ?? "(no subject)"}");
+
+                var tempPath = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    System.IO.Path.GetRandomFileName() + ".p7m");
+                p7m.SaveAsFile(tempPath);
+                byte[] encryptedData;
+                try { encryptedData = System.IO.File.ReadAllBytes(tempPath); }
+                finally { try { System.IO.File.Delete(tempPath); } catch { } }
+
+                var result = SmimeHandler.Decrypt(encryptedData);
+                if (!result.Success || result.Content == null)
+                {
+                    Logger.Debug("AutoDecrypt", $"Could not auto-decrypt: {result.ErrorMessage}");
+                    return;
+                }
+
+                byte[] mimeBytes = result.Content;
+                Logger.Debug("AutoDecrypt", $"CMS decrypted: {mimeBytes.Length} bytes");
+
+                // Unwrap SignedCms if present
+                try
+                {
+                    var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();
+                    signedCms.Decode(mimeBytes);
+                    signedCms.CheckSignature(verifySignatureOnly: false);
+                    mimeBytes = signedCms.ContentInfo.Content;
+                    Logger.Debug("AutoDecrypt", "Signature verified");
+                }
+                catch (System.Security.Cryptography.CryptographicException) { }
+
+                // Parse MIME and restore body
+                string mimeText = System.Text.Encoding.UTF8.GetString(mimeBytes);
+                var headers = Parcl.Core.Crypto.MimeBuilder.ExtractProtectedHeaders(mimeText);
+                var extracted = Parcl.Core.Crypto.MimeBuilder.ExtractBody(mimeText);
+
+                if (extracted.HasContent)
+                {
+                    if (!string.IsNullOrEmpty(extracted.HtmlBody))
+                        mail.HTMLBody = extracted.HtmlBody;
+                    else if (!string.IsNullOrEmpty(extracted.TextBody))
+                        mail.Body = extracted.TextBody;
+                }
+
+                if (headers?.Subject != null)
+                    mail.Subject = headers.Subject;
+
+                // Remove .p7m attachment
+                for (int i = mail.Attachments.Count; i >= 1; i--)
+                {
+                    if (mail.Attachments[i].FileName.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
+                        mail.Attachments[i].Delete();
+                }
+
+                // Restore envelope attachments
+                foreach (var att in extracted.Attachments)
+                {
+                    var attTemp = System.IO.Path.Combine(
+                        System.IO.Path.GetTempPath(),
+                        System.IO.Path.GetRandomFileName() + "_" + att.FileName);
+                    try
+                    {
+                        System.IO.File.WriteAllBytes(attTemp, att.Data);
+                        mail.Attachments.Add(attTemp,
+                            Outlook.OlAttachmentType.olByValue, Type.Missing, att.FileName);
+                    }
+                    finally { try { System.IO.File.Delete(attTemp); } catch { } }
+                }
+
+                mail.Save();
+                Logger.Info("AutoDecrypt", $"Message auto-decrypted: {mail.Subject}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("AutoDecrypt", $"Auto-decrypt skipped: {ex.Message}");
+            }
         }
 
         internal void ToggleTaskPane()
@@ -168,7 +276,10 @@ namespace Parcl.Addin
 
                 var signFlag = mail.UserProperties.Find("ParclSign");
                 if (signFlag != null && (bool)signFlag.Value)
+                {
                     shouldSign = true;
+                    Logger.Debug("Send", "Sign flag set by user toggle");
+                }
 
                 if (Settings.Crypto.AlwaysSign &&
                     !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
@@ -176,17 +287,27 @@ namespace Parcl.Addin
                     var signingCert = CertStore.FindByThumbprint(
                         Settings.UserProfile.SigningCertThumbprint!);
                     if (signingCert != null && signingCert.HasPrivateKey)
+                    {
                         shouldSign = true;
+                        Logger.Debug("Send", "Sign enabled by AlwaysSign setting");
+                    }
                 }
 
                 var encryptFlag = mail.UserProperties.Find("ParclEncrypt");
                 if (encryptFlag != null && (bool)encryptFlag.Value)
+                {
                     shouldEncrypt = true;
+                    Logger.Debug("Send", "Encrypt flag set by user toggle");
+                }
 
                 if (Settings.Crypto.AlwaysEncrypt)
+                {
                     shouldEncrypt = true;
+                    Logger.Debug("Send", "Encrypt enabled by AlwaysEncrypt setting");
+                }
 
                 shouldEncryptRequested = shouldEncrypt;
+                Logger.Info("Send", $"Send mode: encrypt={shouldEncrypt}, sign={shouldSign}");
 
                 // ── Apply ──
                 // If encrypting: do it ourselves (sign goes INSIDE the encrypted envelope per RFC 5751).
@@ -258,6 +379,7 @@ namespace Parcl.Addin
         private string? EncapsulateMessage(Outlook.MailItem mail, bool alsoSign = false)
         {
             // ── Validate ALL recipients have valid certs ──
+            Logger.Info("Send", $"Validating certificates for {mail.Recipients.Count} recipient(s)");
             var recipientCerts =
                 new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
             var errors = new System.Collections.Generic.List<string>();
@@ -266,11 +388,13 @@ namespace Parcl.Addin
             {
                 var recipient = mail.Recipients[i];
                 var smtpAddr = ResolveSmtpAddress(recipient);
+                Logger.Debug("Send", $"Resolving cert for recipient {i}: {smtpAddr}");
                 var cert = ResolveRecipientCert(smtpAddr, recipient);
 
                 if (cert == null)
                 {
                     errors.Add($"{smtpAddr}: No certificate found");
+                    Logger.Warn("Send", $"No certificate found for {smtpAddr}");
                     continue;
                 }
 
@@ -278,22 +402,25 @@ namespace Parcl.Addin
                 if (cert.NotAfter <= DateTime.UtcNow)
                 {
                     errors.Add($"{smtpAddr}: Certificate expired on {cert.NotAfter:yyyy-MM-dd}");
+                    Logger.Warn("Send", $"Certificate expired for {smtpAddr} (expired {cert.NotAfter:yyyy-MM-dd})");
                     continue;
                 }
 
                 if (cert.NotBefore > DateTime.UtcNow)
                 {
                     errors.Add($"{smtpAddr}: Certificate not yet valid (starts {cert.NotBefore:yyyy-MM-dd})");
+                    Logger.Warn("Send", $"Certificate not yet valid for {smtpAddr}");
                     continue;
                 }
 
+                Logger.Info("Send", $"Cert OK for {smtpAddr}: {cert.Subject}, expires {cert.NotAfter:yyyy-MM-dd}");
                 recipientCerts.Add(cert);
             }
 
             if (errors.Count > 0)
             {
                 Logger.Error("Send",
-                    $"Encryption blocked — {errors.Count} recipient(s) failed validation");
+                    $"Encryption blocked: {errors.Count} recipient(s) failed cert validation");
                 return string.Join("\n", errors);
             }
 
@@ -306,8 +433,12 @@ namespace Parcl.Addin
                 var selfCert = CertStore.FindByThumbprint(
                     Settings.UserProfile.EncryptionCertThumbprint!);
                 if (selfCert != null)
+                {
                     recipientCerts.Add(selfCert);
+                    Logger.Debug("Send", $"Added self-encrypt cert: {selfCert.Subject}");
+                }
             }
+            Logger.Info("Send", $"Encrypting to {recipientCerts.Count} certificate(s)");
 
             // ── Build MIME content ──
             var attachments = new System.Collections.Generic.List<Parcl.Core.Crypto.MimeAttachment>();
@@ -353,10 +484,12 @@ namespace Parcl.Addin
             byte[] contentToEncrypt = mimeContent;
             if (alsoSign && !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
             {
+                Logger.Info("Send", $"Signing MIME content inside envelope (sign-then-encrypt per RFC 5751)");
                 var signingCert = CertStore.FindByThumbprint(
                     Settings.UserProfile.SigningCertThumbprint!);
                 if (signingCert != null && signingCert.HasPrivateKey)
                 {
+                    Logger.Debug("Send", $"Signing cert: {signingCert.Subject}, thumbprint: {signingCert.Thumbprint.Substring(0, 8)}");
                     var signedCms = new System.Security.Cryptography.Pkcs.SignedCms(
                         new System.Security.Cryptography.Pkcs.ContentInfo(mimeContent), detached: false);
                     var signer = new System.Security.Cryptography.Pkcs.CmsSigner(
@@ -369,18 +502,16 @@ namespace Parcl.Addin
                     signedCms.ComputeSignature(signer);
                     contentToEncrypt = signedCms.Encode();
                     Logger.Info("Send",
-                        $"MIME content signed inside envelope ({contentToEncrypt.Length} bytes)");
+                        $"Signed: {mimeContent.Length} bytes MIME -> {contentToEncrypt.Length} bytes SignedCms (SHA-256)");
                 }
                 else
                 {
-                    Logger.Warn("Send", "Signing cert not found or has no private key — encrypting without signature");
+                    Logger.Warn("Send", "Signing cert not found or missing private key, encrypting without signature");
                 }
             }
 
-            // ── Encrypt ──
-            // Chain validation was too strict for self-signed/internal certs.
-            // We already validated expiry above. The CMS encrypt will fail if
-            // the cert is truly unusable.
+            // ── Encrypt with AES-256-CBC ──
+            Logger.Info("Send", $"Encrypting {contentToEncrypt.Length} bytes with AES-256-CBC");
             var contentInfo = new System.Security.Cryptography.Pkcs.ContentInfo(contentToEncrypt);
             var envelopedCms = new System.Security.Cryptography.Pkcs.EnvelopedCms(
                 contentInfo,
@@ -398,13 +529,18 @@ namespace Parcl.Addin
             var encrypted = envelopedCms.Encode();
 
             // ── Replace message content ──
-            // RFC 7508: replace outer subject with generic placeholder
-            // (real subject is protected inside the encrypted envelope)
+            // Replace outer subject with generic placeholder
+            // (real subject is protected inside the encrypted envelope via RFC 7508)
             mail.Subject = "Encrypted Message";
-            mail.HTMLBody = "";
-            mail.Body = "";
             while (mail.Attachments.Count > 0)
                 mail.Attachments[1].Delete();
+
+            // Set a visible placeholder body so the recipient knows to use Parcl
+            mail.HTMLBody = "<div style=\"font-family:Segoe UI,sans-serif;padding:24px;\">" +
+                "<h3 style=\"color:#4FC3F7;\">&#128274; Encrypted with Parcl</h3>" +
+                "<p>This message is encrypted. Use the <b>Parcl Decrypt</b> button on the ribbon to read it.</p>" +
+                "<p style=\"color:#888;font-size:11px;\">If you don't have Parcl installed, ask the sender for the unencrypted version.</p>" +
+                "</div>";
 
             var tempPath = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + ".p7m");
@@ -415,15 +551,12 @@ namespace Parcl.Addin
                 Type.Missing,
                 "smime.p7m");
 
-            const string PR_ATTACH_MIME_TAG = "http://schemas.microsoft.com/mapi/proptag/0x370E001E";
-            mail.Attachments[mail.Attachments.Count].PropertyAccessor.SetProperty(
-                PR_ATTACH_MIME_TAG,
-                "application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m");
-
             try { System.IO.File.Delete(tempPath); } catch { }
 
-            const string PR_MESSAGE_CLASS = "http://schemas.microsoft.com/mapi/proptag/0x001A001E";
-            mail.PropertyAccessor.SetProperty(PR_MESSAGE_CLASS, "IPM.Note.SMIME");
+            // DO NOT set IPM.Note.SMIME — Outlook/Exchange intercepts that class
+            // during transport and strips the attachment, leaving an empty message.
+            // Keep as IPM.Note so the smime.p7m attachment arrives intact.
+            // Parcl handles decryption explicitly via the Decrypt ribbon button.
 
             var flag = mail.UserProperties.Find("ParclEncrypt");
             if (flag != null)

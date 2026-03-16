@@ -31,6 +31,7 @@ namespace Parcl.Addin.Dialogs
         private CheckBox _alwaysEncrypt = null!;
 
         // Behavior controls
+        private CheckBox _autoDecrypt = null!;
         private ComboBox _autoLookup = null!;
         private CheckBox _promptMissing = null!;
         private CheckBox _showStatus = null!;
@@ -62,10 +63,10 @@ namespace Parcl.Addin.Dialogs
                 Padding = new Point(12, 4)
             };
 
-            _tabControl.TabPages.Add(CreateLdapTab());
-            _tabControl.TabPages.Add(CreateCryptoTab());
             _tabControl.TabPages.Add(CreateBehaviorTab());
+            _tabControl.TabPages.Add(CreateCryptoTab());
             _tabControl.TabPages.Add(CreateCacheTab());
+            _tabControl.TabPages.Add(CreateLdapTab());
 
             var buttonPanel = new FlowLayoutPanel
             {
@@ -91,7 +92,7 @@ namespace Parcl.Addin.Dialogs
 
         private TabPage CreateLdapTab()
         {
-            var tab = new TabPage("LDAP Directories");
+            var tab = new TabPage("LDAP (Optional)");
             var splitContainer = new SplitContainer
             {
                 Dock = DockStyle.Fill,
@@ -200,26 +201,29 @@ namespace Parcl.Addin.Dialogs
 
         private TabPage CreateBehaviorTab()
         {
-            var tab = new TabPage("Behavior");
+            var tab = new TabPage("General");
             var panel = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 3,
-                Height = 120,
+                RowCount = 5,
+                Height = 180,
                 Padding = new Padding(12)
             };
 
+            _autoDecrypt = new CheckBox { Text = "Automatically decrypt incoming messages" };
             _autoLookup = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _autoLookup.Items.AddRange(new object[] { "Manual", "On Compose", "On Send" });
 
             _promptMissing = new CheckBox { Text = "Prompt when recipient certificate not found" };
             _showStatus = new CheckBox { Text = "Show status bar in Outlook" };
 
-            AddRow(panel, 0, "Auto-lookup:", _autoLookup);
-            panel.Controls.Add(_promptMissing, 0, 1);
+            panel.Controls.Add(_autoDecrypt, 0, 0);
+            panel.SetColumnSpan(_autoDecrypt, 2);
+            AddRow(panel, 1, "Certificate lookup:", _autoLookup);
+            panel.Controls.Add(_promptMissing, 0, 2);
             panel.SetColumnSpan(_promptMissing, 2);
-            panel.Controls.Add(_showStatus, 0, 2);
+            panel.Controls.Add(_showStatus, 0, 3);
             panel.SetColumnSpan(_showStatus, 2);
 
             tab.Controls.Add(panel);
@@ -279,6 +283,7 @@ namespace Parcl.Addin.Dialogs
             _alwaysEncrypt.Checked = _settings.Crypto.AlwaysEncrypt;
 
             // Load behavior
+            _autoDecrypt.Checked = _settings.Behavior.AutoDecrypt;
             _autoLookup.SelectedIndex = (int)_settings.Behavior.AutoLookup;
             _promptMissing.Checked = _settings.Behavior.PromptOnMissingCert;
             _showStatus.Checked = _settings.Behavior.ShowStatusBar;
@@ -297,6 +302,7 @@ namespace Parcl.Addin.Dialogs
             _settings.Crypto.AlwaysSign = _alwaysSign.Checked;
             _settings.Crypto.AlwaysEncrypt = _alwaysEncrypt.Checked;
 
+            _settings.Behavior.AutoDecrypt = _autoDecrypt.Checked;
             _settings.Behavior.AutoLookup = (LookupTrigger)_autoLookup.SelectedIndex;
             _settings.Behavior.PromptOnMissingCert = _promptMissing.Checked;
             _settings.Behavior.ShowStatusBar = _showStatus.Checked;
