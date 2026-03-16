@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  org-guard:
+    name: Verify Repository Organization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure repo is under rayketcham-lab
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO_OWNER" != "rayketcham-lab" ]; then
+            echo "::error::Repository must be under 'rayketcham-lab' organization, not '$REPO_OWNER'"
+            echo "This repo appears to be forked or mirrored to the wrong org."
+            exit 1
+          fi
+          echo "Repo is correctly under rayketcham-lab"
+
+  build:
+    name: Build Solution
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet packages
+        run: dotnet restore Parcl.sln
+
+      - name: Build Core library
+        run: dotnet build src/Parcl.Core/Parcl.Core.csproj --configuration Release --no-restore
+
+      - name: Run Core tests
+        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+  lint:
+    name: Code Quality
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install dotnet-format
+        run: dotnet tool install -g dotnet-format
+
+      - name: Check formatting
+        run: dotnet format Parcl.sln --verify-no-changes --verbosity diagnostic
+        continue-on-error: true
