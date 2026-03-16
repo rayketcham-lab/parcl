@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Extensibility;
@@ -78,11 +79,12 @@ namespace Parcl.Addin
 
                 Logger.Info("AddIn", "Dashboard form created");
 
-                if (Settings.Behavior.AutoLookup == LookupTrigger.OnSend)
-                {
-                    _application.ItemSend += Application_ItemSend;
-                    Logger.Debug("AddIn", "Auto-lookup on send enabled");
-                }
+                // Always hook ItemSend — handles encrypt encapsulation and auto-sign/encrypt
+                _application.ItemSend += Application_ItemSend;
+
+                // Auto-import certificates from viewed messages
+                _application.ItemLoad += Application_ItemLoad;
+                Logger.Debug("AddIn", "Certificate auto-import on view enabled");
 
                 Logger.Info("AddIn", "Parcl add-in started successfully");
             }
@@ -134,30 +136,25 @@ namespace Parcl.Addin
 
             try
             {
+                // ── Signing (Outlook-native via PR_SECURITY_FLAGS) ──
+                const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                const int SECFLAG_SIGNED = 0x02;
+
+                var pa = mail.PropertyAccessor;
+                int flags;
+                try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                catch { flags = 0; }
+
                 if (Settings.Crypto.AlwaysSign &&
                     !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
                 {
-                    Logger.Info("Send", "Auto-sign enabled — applying digital signature");
                     var signingCert = CertStore.FindByThumbprint(
-                        Settings.UserProfile.SigningCertThumbprint);
+                        Settings.UserProfile.SigningCertThumbprint!);
 
                     if (signingCert != null && signingCert.HasPrivateKey)
                     {
-                        var bodyBytes = System.Text.Encoding.UTF8.GetBytes(
-                            mail.Body ?? string.Empty);
-                        var signed = SmimeHandler.Sign(bodyBytes, signingCert);
-
-                        var tempPath = System.IO.Path.Combine(
-                            System.IO.Path.GetTempPath(), "parcl-autosign.p7s");
-                        System.IO.File.WriteAllBytes(tempPath, signed);
-
-                        mail.Attachments.Add(tempPath,
-                            Outlook.OlAttachmentType.olByValue,
-                            Type.Missing,
-                            "smime.p7s");
-
-                        try { System.IO.File.Delete(tempPath); } catch { }
-                        Logger.Info("Send", "Digital signature applied successfully");
+                        flags |= SECFLAG_SIGNED;
+                        Logger.Info("Send", "Auto-sign: S/MIME signature flag set");
                     }
                     else
                     {
@@ -166,77 +163,199 @@ namespace Parcl.Addin
                     }
                 }
 
+                if (flags != 0)
+                    pa.SetProperty(PR_SECURITY_FLAGS, flags);
+
+                // ── Encryption (Parcl encapsulation at send time) ──
+                bool shouldEncrypt = false;
+
+                // Check if user toggled Encrypt on this message
+                var encryptFlag = mail.UserProperties.Find("ParclEncrypt");
+                if (encryptFlag != null && (bool)encryptFlag.Value)
+                    shouldEncrypt = true;
+
+                // Check auto-encrypt setting
                 if (Settings.Crypto.AlwaysEncrypt)
+                    shouldEncrypt = true;
+
+                if (shouldEncrypt)
                 {
-                    Logger.Info("Send", "Auto-encrypt enabled — looking up recipient certificates");
-                    var recipients = mail.Recipients;
-                    var recipientCerts =
-                        new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
-                    bool allResolved = true;
-
-                    for (int i = 1; i <= recipients.Count; i++)
+                    Logger.Info("Send", "Encapsulating message in S/MIME envelope");
+                    bool success = EncapsulateMessage(mail);
+                    if (!success)
                     {
-                        var recipientEmail = recipients[i].Address;
-                        var cert = CertStore.FindByEmail(recipientEmail);
-                        if (cert != null)
+                        if (Settings.Behavior.PromptOnMissingCert)
                         {
-                            recipientCerts.Add(cert);
+                            var result = MessageBox.Show(
+                                "Encryption certificates could not be found for all recipients. " +
+                                "Send unencrypted?",
+                                "Parcl — Missing Certificates",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Warning);
+                            if (result == DialogResult.No)
+                            {
+                                cancel = true;
+                                Logger.Info("Send",
+                                    "User cancelled send due to missing recipient certificates");
+                                return;
+                            }
                         }
-                        else
-                        {
-                            Logger.Warn("Send",
-                                $"No encryption certificate found for {recipientEmail}");
-                            allResolved = false;
-                        }
-                    }
-
-                    if (!allResolved && Settings.Behavior.PromptOnMissingCert)
-                    {
-                        var result = MessageBox.Show(
-                            "Encryption certificates could not be found for all recipients. " +
-                            "Send unencrypted?",
-                            "Parcl — Missing Certificates",
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Warning);
-                        if (result == DialogResult.No)
-                        {
-                            cancel = true;
-                            Logger.Info("Send",
-                                "User cancelled send due to missing recipient certificates");
-                            return;
-                        }
-                    }
-
-                    if (recipientCerts.Count > 0 && allResolved)
-                    {
-                        var bodyBytes = System.Text.Encoding.UTF8.GetBytes(
-                            mail.Body ?? string.Empty);
-                        var encrypted = SmimeHandler.Encrypt(bodyBytes, recipientCerts);
-
-                        var tempPath = System.IO.Path.Combine(
-                            System.IO.Path.GetTempPath(), "parcl-autoencrypt.p7m");
-                        System.IO.File.WriteAllBytes(tempPath, encrypted);
-
-                        mail.Body = "This is an S/MIME encrypted message.";
-                        mail.Attachments.Add(tempPath,
-                            Outlook.OlAttachmentType.olByValue,
-                            Type.Missing,
-                            "smime.p7m");
-
-                        try { System.IO.File.Delete(tempPath); } catch { }
-                        Logger.Info("Send",
-                            $"Message encrypted for {recipientCerts.Count} recipient(s)");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error("Send", "Failed during auto-encrypt/sign", ex);
+                Logger.Error("Send", "Failed during send processing", ex);
                 MessageBox.Show(
                     $"Parcl encountered an error during send processing:\n{ex.Message}",
                     "Parcl Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Performs the actual S/MIME encapsulation at send time.
+        /// Builds MIME from body + attachments, encrypts into CMS envelope,
+        /// replaces message content with IPM.Note.SMIME + smime.p7m.
+        /// Returns false if certs are missing for any recipient.
+        /// </summary>
+        private bool EncapsulateMessage(Outlook.MailItem mail)
+        {
+            // Resolve all recipient certs
+            var recipientCerts =
+                new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
+            var missing = new System.Collections.Generic.List<string>();
+
+            for (int i = 1; i <= mail.Recipients.Count; i++)
+            {
+                var recipient = mail.Recipients[i];
+                var smtpAddr = ResolveSmtpAddress(recipient);
+                var cert = ResolveRecipientCert(smtpAddr, recipient);
+                if (cert != null)
+                    recipientCerts.Add(cert);
+                else
+                    missing.Add(smtpAddr);
+            }
+
+            if (missing.Count > 0)
+            {
+                Logger.Warn("Send",
+                    $"Missing certificates for: {string.Join(", ", missing)}");
+                return false;
+            }
+
+            // Also encrypt to self so Sent Items are readable
+            if (!string.IsNullOrEmpty(Settings.UserProfile.EncryptionCertThumbprint))
+            {
+                var selfCert = CertStore.FindByThumbprint(
+                    Settings.UserProfile.EncryptionCertThumbprint!);
+                if (selfCert != null)
+                    recipientCerts.Add(selfCert);
+            }
+
+            // 1. Build MIME content from body + attachments
+            var attachments = new System.Collections.Generic.List<Parcl.Core.Crypto.MimeAttachment>();
+            for (int i = 1; i <= mail.Attachments.Count; i++)
+            {
+                var att = mail.Attachments[i];
+                var tempAtt = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), $"parcl-att-{i}-{att.FileName}");
+                try
+                {
+                    att.SaveAsFile(tempAtt);
+                    attachments.Add(new Parcl.Core.Crypto.MimeAttachment
+                    {
+                        FileName = att.FileName,
+                        Data = System.IO.File.ReadAllBytes(tempAtt)
+                    });
+                }
+                finally
+                {
+                    try { System.IO.File.Delete(tempAtt); } catch { }
+                }
+            }
+
+            var mimeContent = Parcl.Core.Crypto.MimeBuilder.Build(
+                mail.Body, mail.HTMLBody, attachments.Count > 0 ? attachments : null);
+
+            Logger.Debug("Send",
+                $"MIME content built: {mimeContent.Length} bytes, {attachments.Count} attachment(s)");
+
+            // 2. Encrypt MIME into CMS envelope
+            var encrypted = SmimeHandler.Encrypt(mimeContent, recipientCerts);
+
+            // 3. Clear original body and attachments
+            mail.HTMLBody = "";
+            mail.Body = "";
+            while (mail.Attachments.Count > 0)
+                mail.Attachments[1].Delete();
+
+            // 4. Store encrypted CMS blob
+            var tempPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "parcl-smime.p7m");
+            System.IO.File.WriteAllBytes(tempPath, encrypted);
+
+            mail.Attachments.Add(tempPath,
+                Outlook.OlAttachmentType.olByValue,
+                Type.Missing,
+                "smime.p7m");
+
+            const string PR_ATTACH_MIME_TAG = "http://schemas.microsoft.com/mapi/proptag/0x370E001E";
+            mail.Attachments[mail.Attachments.Count].PropertyAccessor.SetProperty(
+                PR_ATTACH_MIME_TAG,
+                "application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m");
+
+            try { System.IO.File.Delete(tempPath); } catch { }
+
+            // 5. Set message class to S/MIME
+            const string PR_MESSAGE_CLASS = "http://schemas.microsoft.com/mapi/proptag/0x001A001E";
+            mail.PropertyAccessor.SetProperty(PR_MESSAGE_CLASS, "IPM.Note.SMIME");
+
+            // Clean up the user property flag
+            var flag = mail.UserProperties.Find("ParclEncrypt");
+            if (flag != null)
+                flag.Value = false;
+
+            Logger.Info("Send",
+                $"S/MIME encapsulated — {encrypted.Length} bytes for {recipientCerts.Count} recipient(s)");
+            return true;
+        }
+
+        private void Application_ItemLoad(object item)
+        {
+            // When a mail item loads, check for certificate attachments and auto-import
+            if (!(item is Outlook.MailItem mail)) return;
+            if (!mail.Sent) return; // Only process received messages
+
+            try
+            {
+                if (mail.Attachments.Count == 0) return;
+
+                var certExtensions = new[] { ".cer", ".pem", ".crt", ".der", ".p7c" };
+                bool hasCertAttachment = false;
+                for (int i = 1; i <= mail.Attachments.Count; i++)
+                {
+                    var ext = System.IO.Path.GetExtension(mail.Attachments[i].FileName)?.ToLowerInvariant();
+                    if (ext != null && certExtensions.Contains(ext))
+                    {
+                        hasCertAttachment = true;
+                        break;
+                    }
+                }
+
+                if (!hasCertAttachment) return;
+
+                var count = ImportCertificateAttachments(mail);
+                if (count > 0)
+                {
+                    Logger.Info("Import",
+                        $"Auto-imported {count} certificate(s) from message by {mail.SenderEmailAddress}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Import", $"Auto-import skipped: {ex.Message}");
             }
         }
     }

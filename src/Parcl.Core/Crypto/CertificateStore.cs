@@ -47,21 +47,75 @@ namespace Parcl.Core.Crypto
 
         public X509Certificate2? FindByEmail(string email)
         {
-            try
+            // Search multiple stores: AddressBook (Other People) → My (Personal) → Root
+            // This supports local users with certs, imported recipient certs, and enterprise PKI.
+            var storeNames = new[] { StoreName.AddressBook, StoreName.My };
+            foreach (var storeName in storeNames)
             {
-                _personalStore.Open(OpenFlags.ReadOnly);
-                var results = _personalStore.Certificates.Find(
-                    X509FindType.FindBySubjectName, email, false);
+                var cert = FindByEmailInStore(email, storeName);
+                if (cert != null)
+                    return cert;
+            }
+            return null;
+        }
 
-                return results.Cast<X509Certificate2>()
-                    .Where(c => c.NotAfter > DateTime.UtcNow && c.NotBefore <= DateTime.UtcNow)
-                    .OrderByDescending(c => c.NotAfter)
-                    .FirstOrDefault();
-            }
-            finally
+        private static X509Certificate2? FindByEmailInStore(string email, StoreName storeName)
+        {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            using (var store = new X509Store(storeName, StoreLocation.CurrentUser))
             {
-                _personalStore.Close();
+                try
+                {
+                    store.Open(OpenFlags.ReadOnly);
+
+                    // First try FindBySubjectName (matches CN in Subject DN)
+                    var results = store.Certificates.Find(
+                        X509FindType.FindBySubjectName, email, false);
+                    var match = results.Cast<X509Certificate2>()
+                        .Where(c => c.NotAfter > DateTime.UtcNow && c.NotBefore <= DateTime.UtcNow)
+                        .OrderByDescending(c => c.NotAfter)
+                        .FirstOrDefault();
+                    if (match != null) return match;
+
+                    // Fall back to scanning all certs and checking the SAN email field,
+                    // since many certs store the email only in Subject Alternative Name.
+                    foreach (var cert in store.Certificates.Cast<X509Certificate2>())
+                    {
+                        if (cert.NotAfter <= DateTime.UtcNow || cert.NotBefore > DateTime.UtcNow)
+                            continue;
+
+                        if (CertContainsEmail(cert, normalizedEmail))
+                            return cert;
+                    }
+
+                    return null;
+                }
+                finally
+                {
+                    store.Close();
+                }
             }
+        }
+
+        private static bool CertContainsEmail(X509Certificate2 cert, string email)
+        {
+            // Check Subject DN for email-like content
+            if (cert.Subject != null &&
+                cert.Subject.ToLowerInvariant().Contains(email))
+                return true;
+
+            // Check Subject Alternative Name extension for RFC822 email
+            foreach (var ext in cert.Extensions)
+            {
+                if (ext.Oid?.Value == "2.5.29.17") // SAN
+                {
+                    var san = ext.Format(false).ToLowerInvariant();
+                    if (san.Contains(email))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         public void ImportCertificate(byte[] certData, string? password = null)
@@ -87,6 +141,29 @@ namespace Parcl.Core.Crypto
         {
             var cert = FindByThumbprint(thumbprint);
             return cert?.Export(X509ContentType.Cert);
+        }
+
+        /// <summary>
+        /// Publishes a certificate to the "Other People" (AddressBook) store so
+        /// Outlook's S/MIME engine can find it when encrypting to this recipient.
+        /// </summary>
+        public void PublishToAddressBook(X509Certificate2 cert)
+        {
+            using (var addressBook = new X509Store(StoreName.AddressBook, StoreLocation.CurrentUser))
+            {
+                try
+                {
+                    addressBook.Open(OpenFlags.ReadWrite);
+                    var existing = addressBook.Certificates.Find(
+                        X509FindType.FindByThumbprint, cert.Thumbprint, false);
+                    if (existing.Count == 0)
+                        addressBook.Add(cert);
+                }
+                finally
+                {
+                    addressBook.Close();
+                }
+            }
         }
 
         private List<CertificateInfo> GetCertificates(Func<X509Certificate2, bool> filter)

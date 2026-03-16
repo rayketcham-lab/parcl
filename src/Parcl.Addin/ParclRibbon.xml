@@ -6,13 +6,14 @@
     <tabs>
       <tab id="ParclTab" label="Parcl" insertAfterMso="TabMail">
         <group id="grpSecurity" label="Security">
-          <button id="btnEncrypt"
-                  label="Encrypt"
-                  screentip="Encrypt this message"
-                  supertip="Encrypt the message using recipient certificates found via LDAP or local store."
-                  size="large"
-                  image="btnEncrypt"
-                  onAction="OnEncryptClick" />
+          <toggleButton id="btnEncrypt"
+                        label="Encrypt"
+                        screentip="Encrypt this message"
+                        supertip="Toggle S/MIME encryption. When pressed, the message will be encrypted on send."
+                        size="large"
+                        image="btnEncrypt"
+                        onAction="OnEncryptToggle"
+                        getPressed="GetEncryptPressed" />
           <button id="btnDecrypt"
                   label="Decrypt"
                   screentip="Decrypt this message"
@@ -20,13 +21,14 @@
                   size="large"
                   image="btnDecrypt"
                   onAction="OnDecryptClick" />
-          <button id="btnSign"
-                  label="Sign"
-                  screentip="Digitally sign this message"
-                  supertip="Apply a digital signature using your signing certificate."
-                  size="large"
-                  image="btnSign"
-                  onAction="OnSignClick" />
+          <toggleButton id="btnSign"
+                        label="Sign"
+                        screentip="Digitally sign this message"
+                        supertip="Toggle S/MIME signature. When pressed, the message will be signed on send."
+                        size="large"
+                        image="btnSign"
+                        onAction="OnSignToggle"
+                        getPressed="GetSignPressed" />
         </group>
         <group id="grpCertificates" label="Certificates">
           <button id="btnCertExchange"
@@ -71,4 +73,51 @@
       </tab>
     </tabs>
   </ribbon>
+
+  <!-- Right-click context menus -->
+  <contextMenus>
+    <!-- Context menu for compose (new/reply/forward) messages -->
+    <contextMenu idMso="ContextMenuMailItem">
+      <menuSeparator id="ParclSepCompose" />
+      <menu id="ParclCtxCompose" label="Parcl" image="btnEncrypt">
+        <button id="ctxEncrypt"
+                label="Encrypt"
+                image="btnEncrypt"
+                onAction="OnEncryptClick" />
+        <button id="ctxSign"
+                label="Sign"
+                image="btnSign"
+                onAction="OnSignClick" />
+        <menuSeparator id="ParclCtxSep1" />
+        <button id="ctxRemoveEncrypt"
+                label="Remove Encryption"
+                image="btnDecrypt"
+                onAction="OnRemoveEncryptionClick" />
+        <button id="ctxRemoveSign"
+                label="Remove Signature"
+                image="btnDecrypt"
+                onAction="OnRemoveSignatureClick" />
+        <menuSeparator id="ParclCtxSep2" />
+        <button id="ctxSendCert"
+                label="Send Certificate"
+                image="btnCertExchange"
+                onAction="OnCertExchangeClick" />
+      </menu>
+    </contextMenu>
+
+    <!-- Context menu for read-only (received) messages -->
+    <contextMenu idMso="ContextMenuReadOnlyMailItem">
+      <menuSeparator id="ParclSepRead" />
+      <menu id="ParclCtxRead" label="Parcl" image="btnDecrypt">
+        <button id="ctxEncryptAtRest"
+                label="Encrypt (Lock)"
+                image="btnEncrypt"
+                onAction="OnEncryptClick" />
+        <button id="ctxDecrypt"
+                label="Decrypt"
+                image="btnDecrypt"
+                onAction="OnDecryptClick" />
+      </menu>
+    </contextMenu>
+  </contextMenus>
 </customUI>

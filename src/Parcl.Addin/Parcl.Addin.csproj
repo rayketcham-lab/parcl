@@ -13,10 +13,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
-    <Reference Include="office">
-      <HintPath>..\..\lib\office.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="System.DirectoryServices" />
     <Reference Include="System.Security" />
     <Reference Include="System.Windows.Forms" />

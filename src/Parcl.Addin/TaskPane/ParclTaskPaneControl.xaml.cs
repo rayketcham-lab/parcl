@@ -50,7 +50,7 @@ namespace Parcl.Addin.TaskPane
             {
                 if (!string.IsNullOrEmpty(_settings.UserProfile.SigningCertThumbprint))
                 {
-                    var cert = _certStore.FindByThumbprint(_settings.UserProfile.SigningCertThumbprint);
+                    var cert = _certStore.FindByThumbprint(_settings.UserProfile.SigningCertThumbprint!);
                     if (cert != null)
                     {
                         var info = CertificateInfo.FromX509(cert);
@@ -64,7 +64,7 @@ namespace Parcl.Addin.TaskPane
 
                 if (!string.IsNullOrEmpty(_settings.UserProfile.EncryptionCertThumbprint))
                 {
-                    var cert = _certStore.FindByThumbprint(_settings.UserProfile.EncryptionCertThumbprint);
+                    var cert = _certStore.FindByThumbprint(_settings.UserProfile.EncryptionCertThumbprint!);
                     if (cert != null)
                     {
                         var info = CertificateInfo.FromX509(cert);

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -13,81 +14,95 @@ namespace Parcl.Core.Config
         Error = 3
     }
 
+    /// <summary>
+    /// Structured JSONL logger. Each line is a self-contained JSON object.
+    ///
+    /// Filter examples:
+    ///   PowerShell:  Get-Content parcl.jsonl | ConvertFrom-Json | Where-Object cmp -eq "LDAP"
+    ///   PowerShell:  Get-Content parcl.jsonl | ConvertFrom-Json | Where-Object lvl -eq "ERROR" | Format-Table
+    ///   jq:          jq 'select(.cmp=="Encrypt")' parcl.jsonl
+    ///   Excel:       Data → Get Data → From JSON → select the .jsonl file
+    /// </summary>
     public class ParclLogger : IDisposable
     {
-        private static readonly string LogDir =
+        private static readonly string DefaultLogDir =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Parcl", "logs");
 
+        private readonly string _logDir;
+        private readonly string _sessionId;
+        private readonly int _pid;
         private readonly LogLevel _minLevel;
         private readonly StreamWriter _writer;
         private readonly string _logFile;
         private readonly object _lock = new object();
         private bool _disposed;
 
-        public ParclLogger(LogLevel minLevel = LogLevel.Debug)
+        public ParclLogger(LogLevel minLevel = LogLevel.Debug, string? logDirectory = null)
         {
             _minLevel = minLevel;
+            _logDir = logDirectory ?? DefaultLogDir;
+            _pid = Process.GetCurrentProcess().Id;
+            _sessionId = GenerateSessionId();
 
-            Directory.CreateDirectory(LogDir);
+            Directory.CreateDirectory(_logDir);
             CleanOldLogs(maxAgeDays: 7);
 
-            _logFile = Path.Combine(LogDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.log");
+            _logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.jsonl");
             _writer = new StreamWriter(
-                new FileStream(_logFile, FileMode.Append, FileAccess.Write, FileShare.Read),
+                new FileStream(_logFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite),
                 Encoding.UTF8);
 
-            Info("Logger", $"Session started — level={_minLevel}, pid={System.Diagnostics.Process.GetCurrentProcess().Id}");
+            Info("Logger", $"Session started — level={_minLevel}");
         }
 
-        /// <summary>
-        /// Operational detail useful during development or diagnosing specific issues.
-        /// Use for: method entry/exit with key params, cache hits/misses, config values loaded.
-        /// Do NOT use for: loop iterations, per-byte processing, UI redraws.
-        /// </summary>
         public void Debug(string component, string message)
             => Write(LogLevel.Debug, component, message);
 
-        /// <summary>
-        /// Significant operational events that confirm the system is working correctly.
-        /// Use for: user actions (encrypt, sign, lookup), connection established, cert loaded.
-        /// Keep these meaningful — each INFO line should tell you something happened.
-        /// </summary>
         public void Info(string component, string message)
             => Write(LogLevel.Info, component, message);
 
-        /// <summary>
-        /// Something unexpected that the system recovered from, but deserves attention.
-        /// Use for: cert expiring soon, LDAP fallback to next server, deprecated config found.
-        /// </summary>
         public void Warn(string component, string message)
             => Write(LogLevel.Warn, component, message);
 
-        /// <summary>
-        /// Operation failed. The user's action did not complete as expected.
-        /// Use for: LDAP connection failure, decrypt failed, cert store access denied.
-        /// Always include the actionable detail — what failed, what was attempted, what to check.
-        /// </summary>
         public void Error(string component, string message)
             => Write(LogLevel.Error, component, message);
 
-        /// <summary>
-        /// Error with exception details. Captures type, message, and first stack frame.
-        /// </summary>
         public void Error(string component, string message, Exception ex)
         {
             var firstFrame = ex.StackTrace?.Split('\n')[0]?.Trim() ?? "no stack";
-            Write(LogLevel.Error, component, $"{message} | {ex.GetType().Name}: {ex.Message} | at {firstFrame}");
+            WriteError(component, message, ex.GetType().Name, ex.Message, firstFrame);
         }
 
         private void Write(LogLevel level, string component, string message)
         {
             if (level < _minLevel || _disposed) return;
 
-            var timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture);
-            var lvl = level.ToString().ToUpper().PadRight(5);
-            var comp = component.PadRight(8);
-            var line = $"{timestamp} [{lvl}] [{comp}] {message}";
+            var ts = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+            var lvl = level.ToString().ToUpper();
+            var line = $"{{\"ts\":\"{ts}\",\"lvl\":\"{lvl}\",\"cmp\":\"{EscapeJson(component)}\"," +
+                       $"\"sid\":\"{_sessionId}\",\"pid\":{_pid}," +
+                       $"\"msg\":\"{EscapeJson(message)}\"}}";
 
+            WriteLine(line);
+        }
+
+        private void WriteError(string component, string message,
+            string exType, string exMsg, string frame)
+        {
+            if (_disposed) return;
+
+            var ts = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+            var line = $"{{\"ts\":\"{ts}\",\"lvl\":\"ERROR\",\"cmp\":\"{EscapeJson(component)}\"," +
+                       $"\"sid\":\"{_sessionId}\",\"pid\":{_pid}," +
+                       $"\"msg\":\"{EscapeJson(message)}\"," +
+                       $"\"err\":{{\"type\":\"{EscapeJson(exType)}\",\"msg\":\"{EscapeJson(exMsg)}\"," +
+                       $"\"at\":\"{EscapeJson(frame)}\"}}}}";
+
+            WriteLine(line);
+        }
+
+        private void WriteLine(string line)
+        {
             lock (_lock)
             {
                 if (_disposed) return;
@@ -96,12 +111,18 @@ namespace Parcl.Core.Config
             }
         }
 
-        private static void CleanOldLogs(int maxAgeDays)
+        private void CleanOldLogs(int maxAgeDays)
         {
             try
             {
                 var cutoff = DateTime.Now.AddDays(-maxAgeDays);
-                foreach (var file in Directory.GetFiles(LogDir, "parcl-*.log"))
+                foreach (var file in Directory.GetFiles(_logDir, "parcl-*.jsonl"))
+                {
+                    if (File.GetCreationTime(file) < cutoff)
+                        File.Delete(file);
+                }
+                // Also clean legacy .log files
+                foreach (var file in Directory.GetFiles(_logDir, "parcl-*.log"))
                 {
                     if (File.GetCreationTime(file) < cutoff)
                         File.Delete(file);
@@ -118,14 +139,49 @@ namespace Parcl.Core.Config
             {
                 if (_disposed) return;
 
-                // Write final message directly (bypassing _disposed check)
-                var timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture);
-                _writer.WriteLine($"{timestamp} [INFO ] [Logger  ] Session ending");
+                var ts = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+                _writer.WriteLine(
+                    $"{{\"ts\":\"{ts}\",\"lvl\":\"INFO\",\"cmp\":\"Logger\"," +
+                    $"\"sid\":\"{_sessionId}\",\"pid\":{_pid}," +
+                    $"\"msg\":\"Session ending\"}}");
 
                 _disposed = true;
                 _writer.Flush();
                 _writer.Dispose();
             }
+        }
+
+        private static string GenerateSessionId()
+        {
+            // Short 6-char hex ID — enough to distinguish concurrent sessions
+            var bytes = new byte[3];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+                rng.GetBytes(bytes);
+            return BitConverter.ToString(bytes).Replace("-", "").ToLower();
+        }
+
+        private static string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var sb = new StringBuilder(s.Length);
+            foreach (var c in s)
+            {
+                switch (c)
+                {
+                    case '"': sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (c < ' ')
+                            sb.AppendFormat("\\u{0:x4}", (int)c);
+                        else
+                            sb.Append(c);
+                        break;
+                }
+            }
+            return sb.ToString();
         }
     }
 }

@@ -37,11 +37,17 @@ jobs:
       - name: Restore NuGet packages
         run: dotnet restore Parcl.sln
 
-      - name: Build Core library
-        run: dotnet build src/Parcl.Core/Parcl.Core.csproj --configuration Release --no-restore
+      - name: Build solution
+        run: dotnet build Parcl.sln --configuration Release --no-restore
 
-      - name: Run Core tests
+      - name: Run tests
         run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parcl-Installer
+          path: src/Parcl.Installer/bin/Release/Parcl.Installer.msi
 
   lint:
     name: Code Quality

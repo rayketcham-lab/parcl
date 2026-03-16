@@ -3,6 +3,14 @@
     <OutputType>Package</OutputType>
     <InstallerPlatform>x64</InstallerPlatform>
     <OutputPath>bin\$(Configuration)\</OutputPath>
+    <!-- ICE40: REINSTALLMODE in Property table — intentional for repair support -->
+    <!-- ICE61: AllowSameVersionUpgrades=yes means max version equals current — by design -->
+    <!-- ICE91: Per-user directory does not vary with ALLUSERS — correct for Scope=perUser -->
+    <SuppressIces>ICE40;ICE61;ICE91</SuppressIces>
     <DefineConstants>AddinSourceDir=$(MSBuildThisFileDirectory)..\Parcl.Addin\bin\$(Configuration)\net48</DefineConstants>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Ensure Addin is built before packaging -->
+    <ProjectReference Include="..\Parcl.Addin\Parcl.Addin.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>
