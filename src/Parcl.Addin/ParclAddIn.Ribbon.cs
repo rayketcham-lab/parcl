@@ -278,8 +278,21 @@ namespace Parcl.Addin
                 if (result.Success && result.Content != null)
                 {
                     bool isAtRest = smimeAttachment.FileName == "parcl-encrypted.p7m";
+                    string decryptedText = Encoding.UTF8.GetString(result.Content);
 
-                    mail.Body = Encoding.UTF8.GetString(result.Content);
+                    mail.Body = decryptedText;
+
+                    // RFC 7508: restore protected headers from inside the envelope
+                    var protectedHeaders = Parcl.Core.Crypto.MimeBuilder.ExtractProtectedHeaders(decryptedText);
+                    if (protectedHeaders != null)
+                    {
+                        if (!string.IsNullOrEmpty(protectedHeaders.Subject))
+                        {
+                            mail.Subject = protectedHeaders.Subject;
+                            Logger.Info("Decrypt",
+                                $"Protected subject restored: {Truncate(protectedHeaders.Subject, 30)}");
+                        }
+                    }
 
                     if (isAtRest)
                     {

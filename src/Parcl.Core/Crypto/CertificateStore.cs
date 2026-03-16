@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
+using Parcl.Core.Config;
 using Parcl.Core.Models;
 
 namespace Parcl.Core.Crypto
@@ -189,14 +190,32 @@ namespace Parcl.Core.Crypto
         }
 
         /// <summary>
-        /// Builds an X.509 chain with online revocation checking and returns the result.
+        /// Builds an X.509 chain and returns the result.
+        /// Validation depth is controlled by <see cref="CertValidationMode"/>:
+        /// None = expiry only, Relaxed = chain without revocation, Strict = chain + OCSP/CRL.
         /// </summary>
-        public ChainValidationResult ValidateCertificateChain(X509Certificate2 cert)
+        public ChainValidationResult ValidateCertificateChain(X509Certificate2 cert, CertValidationMode mode)
         {
+            if (mode == CertValidationMode.None)
+            {
+                bool expired = cert.NotAfter <= DateTime.UtcNow || cert.NotBefore > DateTime.UtcNow;
+                return expired
+                    ? new ChainValidationResult { IsValid = false, ErrorMessage = "Certificate is expired or not yet valid." }
+                    : new ChainValidationResult { IsValid = true };
+            }
+
             using (var chain = new X509Chain())
             {
-                chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-                chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
+                if (mode == CertValidationMode.Relaxed)
+                {
+                    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+                }
+                else // Strict
+                {
+                    chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                    chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
+                }
+
                 chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
 
                 bool isValid = chain.Build(cert);

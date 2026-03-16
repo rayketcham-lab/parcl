@@ -26,6 +26,7 @@ namespace Parcl.Addin.Dialogs
         // Crypto controls
         private ComboBox _encAlgo = null!;
         private ComboBox _hashAlgo = null!;
+        private ComboBox _certValidation = null!;
         private CheckBox _alwaysSign = null!;
         private CheckBox _alwaysEncrypt = null!;
 
@@ -168,25 +169,29 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 4,
-                Height = 160,
+                RowCount = 5,
+                Height = 190,
                 Padding = new Padding(12)
             };
 
             _encAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC", "3DES" });
+            _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC" });
 
             _hashAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _hashAlgo.Items.AddRange(new object[] { "SHA-1", "SHA-256", "SHA-384", "SHA-512" });
+            _hashAlgo.Items.AddRange(new object[] { "SHA-256", "SHA-384", "SHA-512" });
+
+            _certValidation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            _certValidation.Items.AddRange(new object[] { "None", "Relaxed", "Strict" });
 
             _alwaysSign = new CheckBox { Text = "Always sign outgoing messages" };
             _alwaysEncrypt = new CheckBox { Text = "Always encrypt outgoing messages" };
 
             AddRow(panel, 0, "Encryption Algorithm:", _encAlgo);
             AddRow(panel, 1, "Hash Algorithm:", _hashAlgo);
-            panel.Controls.Add(_alwaysSign, 0, 2);
+            AddRow(panel, 2, "Certificate Validation:", _certValidation);
+            panel.Controls.Add(_alwaysSign, 0, 3);
             panel.SetColumnSpan(_alwaysSign, 2);
-            panel.Controls.Add(_alwaysEncrypt, 0, 3);
+            panel.Controls.Add(_alwaysEncrypt, 0, 4);
             panel.SetColumnSpan(_alwaysEncrypt, 2);
 
             tab.Controls.Add(panel);
@@ -269,6 +274,7 @@ namespace Parcl.Addin.Dialogs
             // Load crypto settings
             _encAlgo.SelectedItem = _settings.Crypto.EncryptionAlgorithm;
             _hashAlgo.SelectedItem = _settings.Crypto.HashAlgorithm;
+            _certValidation.SelectedIndex = (int)_settings.Crypto.ValidationMode;
             _alwaysSign.Checked = _settings.Crypto.AlwaysSign;
             _alwaysEncrypt.Checked = _settings.Crypto.AlwaysEncrypt;
 
@@ -287,6 +293,7 @@ namespace Parcl.Addin.Dialogs
         {
             _settings.Crypto.EncryptionAlgorithm = _encAlgo.SelectedItem?.ToString() ?? "AES-256-CBC";
             _settings.Crypto.HashAlgorithm = _hashAlgo.SelectedItem?.ToString() ?? "SHA-256";
+            _settings.Crypto.ValidationMode = (CertValidationMode)_certValidation.SelectedIndex;
             _settings.Crypto.AlwaysSign = _alwaysSign.Checked;
             _settings.Crypto.AlwaysEncrypt = _alwaysEncrypt.Checked;
 

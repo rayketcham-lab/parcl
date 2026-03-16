@@ -60,6 +60,14 @@ namespace Parcl.Core.Config
         public string HashAlgorithm { get; set; } = "SHA-256";
         public bool AlwaysSign { get; set; }
         public bool AlwaysEncrypt { get; set; }
+        public CertValidationMode ValidationMode { get; set; } = CertValidationMode.Relaxed;
+    }
+
+    public enum CertValidationMode
+    {
+        None,       // Expiry only — for self-signed certs, lab/test
+        Relaxed,    // Chain validation, skip revocation — for internal CAs
+        Strict      // Full chain + OCSP/CRL — for public PKI
     }
 
     public class CacheSettings

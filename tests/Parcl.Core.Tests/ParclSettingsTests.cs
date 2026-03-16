@@ -18,6 +18,7 @@ namespace Parcl.Core.Tests
             Assert.Equal("SHA-256", settings.Crypto.HashAlgorithm);
             Assert.False(settings.Crypto.AlwaysSign);
             Assert.False(settings.Crypto.AlwaysEncrypt);
+            Assert.Equal(CertValidationMode.Relaxed, settings.Crypto.ValidationMode);
             Assert.True(settings.Cache.EnableCertCache);
             Assert.Equal(24, settings.Cache.CacheExpirationHours);
             Assert.Equal(500, settings.Cache.MaxCacheEntries);

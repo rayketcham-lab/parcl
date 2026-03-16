@@ -332,11 +332,22 @@ namespace Parcl.Addin
                 }
             }
 
+            // RFC 7508: include protected headers inside the encrypted envelope
+            var protectedHeaders = new Parcl.Core.Crypto.ProtectedHeaders
+            {
+                Subject = mail.Subject,
+                From = mail.SenderEmailAddress ?? "",
+                To = mail.To ?? "",
+                Date = DateTime.UtcNow.ToString("R")
+            };
+
             var mimeContent = Parcl.Core.Crypto.MimeBuilder.Build(
-                mail.Body, mail.HTMLBody, attachments.Count > 0 ? attachments : null);
+                mail.Body, mail.HTMLBody,
+                attachments.Count > 0 ? attachments : null,
+                protectedHeaders);
 
             Logger.Debug("Send",
-                $"MIME content built: {mimeContent.Length} bytes, {attachments.Count} attachment(s)");
+                $"MIME content built: {mimeContent.Length} bytes, {attachments.Count} attachment(s), protected headers included");
 
             // ── Sign INSIDE the envelope if requested (sign-then-encrypt per RFC 5751) ──
             byte[] contentToEncrypt = mimeContent;
@@ -387,6 +398,9 @@ namespace Parcl.Addin
             var encrypted = envelopedCms.Encode();
 
             // ── Replace message content ──
+            // RFC 7508: replace outer subject with generic placeholder
+            // (real subject is protected inside the encrypted envelope)
+            mail.Subject = "Encrypted Message";
             mail.HTMLBody = "";
             mail.Body = "";
             while (mail.Attachments.Count > 0)
