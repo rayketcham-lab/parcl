@@ -215,6 +215,184 @@ namespace Parcl.Core.Crypto
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Parses decrypted MIME content and extracts the body text/HTML and attachments.
+        /// This is the inverse of Build() — it reconstructs the original message parts.
+        /// </summary>
+        public static MimeExtractResult ExtractBody(string mimeContent)
+        {
+            var result = new MimeExtractResult();
+            if (string.IsNullOrEmpty(mimeContent))
+                return result;
+
+            // Check for multipart boundary
+            int boundaryIdx = mimeContent.IndexOf("boundary=\"", StringComparison.OrdinalIgnoreCase);
+            if (boundaryIdx < 0)
+            {
+                // Single-part message — decode the base64 body
+                return ExtractSinglePart(mimeContent);
+            }
+
+            int boundaryStart = boundaryIdx + "boundary=\"".Length;
+            int boundaryEnd = mimeContent.IndexOf('"', boundaryStart);
+            if (boundaryEnd < 0)
+                return result;
+
+            string boundary = mimeContent.Substring(boundaryStart, boundaryEnd - boundaryStart);
+            string delimiter = "--" + boundary;
+            string terminator = delimiter + "--";
+
+            // Split on boundary
+            var parts = new List<string>();
+            int pos = mimeContent.IndexOf(delimiter, StringComparison.Ordinal);
+            while (pos >= 0)
+            {
+                int partStart = pos + delimiter.Length;
+                // Skip \r\n after delimiter
+                if (partStart < mimeContent.Length && mimeContent[partStart] == '\r') partStart++;
+                if (partStart < mimeContent.Length && mimeContent[partStart] == '\n') partStart++;
+
+                int nextBoundary = mimeContent.IndexOf(delimiter, partStart, StringComparison.Ordinal);
+                if (nextBoundary < 0)
+                    break;
+
+                parts.Add(mimeContent.Substring(partStart, nextBoundary - partStart));
+                pos = nextBoundary;
+
+                // Check if this is the terminator
+                if (nextBoundary + delimiter.Length < mimeContent.Length &&
+                    mimeContent.Substring(nextBoundary, terminator.Length) == terminator)
+                    break;
+            }
+
+            foreach (var part in parts)
+            {
+                // Split headers from body (blank line separates them)
+                int headerEnd = part.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                string nlSeq = "\r\n\r\n";
+                if (headerEnd < 0)
+                {
+                    headerEnd = part.IndexOf("\n\n", StringComparison.Ordinal);
+                    nlSeq = "\n\n";
+                }
+                if (headerEnd < 0)
+                    continue;
+
+                string headers = part.Substring(0, headerEnd);
+                string body = part.Substring(headerEnd + nlSeq.Length).Trim();
+
+                // Skip protected headers part
+                if (headers.IndexOf("protected-headers=", StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+
+                // Check Content-Disposition for attachments
+                if (headers.IndexOf("Content-Disposition: attachment", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var att = new MimeAttachment();
+
+                    // Extract filename
+                    int fnIdx = headers.IndexOf("filename=\"", StringComparison.OrdinalIgnoreCase);
+                    if (fnIdx >= 0)
+                    {
+                        int fnStart = fnIdx + "filename=\"".Length;
+                        int fnEnd = headers.IndexOf('"', fnStart);
+                        if (fnEnd > fnStart)
+                            att.FileName = headers.Substring(fnStart, fnEnd - fnStart);
+                    }
+
+                    // Decode base64 body
+                    if (headers.IndexOf("base64", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        try { att.Data = Convert.FromBase64String(body.Replace("\r", "").Replace("\n", "")); }
+                        catch { att.Data = Encoding.UTF8.GetBytes(body); }
+                    }
+                    else
+                    {
+                        att.Data = Encoding.UTF8.GetBytes(body);
+                    }
+
+                    result.Attachments.Add(att);
+                    continue;
+                }
+
+                // Body part — text/html or text/plain
+                bool isHtml = headers.IndexOf("text/html", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isBase64 = headers.IndexOf("base64", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                string decoded;
+                if (isBase64)
+                {
+                    try
+                    {
+                        var bytes = Convert.FromBase64String(body.Replace("\r", "").Replace("\n", ""));
+                        decoded = Encoding.UTF8.GetString(bytes);
+                    }
+                    catch
+                    {
+                        decoded = body;
+                    }
+                }
+                else
+                {
+                    decoded = body;
+                }
+
+                if (isHtml)
+                    result.HtmlBody = decoded;
+                else if (result.TextBody == null) // take first text/plain
+                    result.TextBody = decoded;
+            }
+
+            return result;
+        }
+
+        private static MimeExtractResult ExtractSinglePart(string mimeContent)
+        {
+            var result = new MimeExtractResult();
+
+            // Find header/body split
+            int headerEnd = mimeContent.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            string nlSeq = "\r\n\r\n";
+            if (headerEnd < 0)
+            {
+                headerEnd = mimeContent.IndexOf("\n\n", StringComparison.Ordinal);
+                nlSeq = "\n\n";
+            }
+            if (headerEnd < 0)
+            {
+                result.TextBody = mimeContent;
+                return result;
+            }
+
+            string headers = mimeContent.Substring(0, headerEnd);
+            string body = mimeContent.Substring(headerEnd + nlSeq.Length).Trim();
+
+            bool isHtml = headers.IndexOf("text/html", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isBase64 = headers.IndexOf("base64", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            string decoded;
+            if (isBase64)
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(body.Replace("\r", "").Replace("\n", ""));
+                    decoded = Encoding.UTF8.GetString(bytes);
+                }
+                catch { decoded = body; }
+            }
+            else
+            {
+                decoded = body;
+            }
+
+            if (isHtml)
+                result.HtmlBody = decoded;
+            else
+                result.TextBody = decoded;
+
+            return result;
+        }
+
         private static string WrapBase64(string b64)
         {
             var sb = new StringBuilder(b64.Length + b64.Length / 76);
@@ -224,6 +402,18 @@ namespace Parcl.Core.Crypto
             }
             return sb.ToString().TrimEnd();
         }
+    }
+
+    /// <summary>
+    /// Result of parsing decrypted MIME content back into its component parts.
+    /// </summary>
+    public class MimeExtractResult
+    {
+        public string? TextBody { get; set; }
+        public string? HtmlBody { get; set; }
+        public List<MimeAttachment> Attachments { get; set; } = new List<MimeAttachment>();
+
+        public bool HasContent => TextBody != null || HtmlBody != null;
     }
 
     public class MimeAttachment

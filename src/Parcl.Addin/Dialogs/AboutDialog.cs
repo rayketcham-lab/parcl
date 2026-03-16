@@ -128,7 +128,7 @@ namespace Parcl.Addin.Dialogs
             CancelButton = closeBtn;
         }
 
-        private static LinkLabel CreateLink(string text, string url, Point location)
+        private LinkLabel CreateLink(string text, string url, Point location)
         {
             var link = new LinkLabel
             {
@@ -142,8 +142,27 @@ namespace Parcl.Addin.Dialogs
             };
             link.LinkClicked += (s, e) =>
             {
-                try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-                catch { }
+                // mailto: links reenter Outlook which deadlocks against this modal dialog.
+                // Close the dialog first, then launch the link after a short delay.
+                if (url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var timer = new Timer { Interval = 150 };
+                    timer.Tick += (ts, te) =>
+                    {
+                        timer.Stop();
+                        timer.Dispose();
+                        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+                        catch { }
+                    };
+                    timer.Start();
+                    DialogResult = DialogResult.OK;
+                    Close();
+                }
+                else
+                {
+                    try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+                    catch { }
+                }
             };
             return link;
         }

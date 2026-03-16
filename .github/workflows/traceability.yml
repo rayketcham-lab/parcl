@@ -1,0 +1,169 @@
+name: Issue Traceability
+
+on:
+  # Check commits reference issues
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+  # Check issues have linked commits/PRs
+  schedule:
+    - cron: '0 8 * * 1' # Weekly Monday 8am UTC
+
+  workflow_dispatch:
+    inputs:
+      max-stale-days:
+        description: 'Flag issues with no linked commit after N days'
+        default: '7'
+
+jobs:
+  # ── 1:1 minimum — every PR/push must reference an issue ──────────────
+  commit-references-issue:
+    name: Commits reference issues
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages reference an issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "## Commit-Issue Traceability Check"
+          echo ""
+
+          # Determine commit range
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            COMMITS=$(git log --format="%H %s" "origin/main..HEAD" 2>/dev/null || true)
+          else
+            # Push: check only new commits
+            if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+              COMMITS=$(git log --format="%H %s" -1 HEAD)
+            else
+              COMMITS=$(git log --format="%H %s" "${BASE_SHA}..${HEAD_SHA}" 2>/dev/null || true)
+            fi
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+
+          FAIL=0
+          TOTAL=0
+          LINKED=0
+
+          while IFS= read -r line; do
+            SHA="${line%% *}"
+            MSG="${line#* }"
+            SHORT="${SHA:0:7}"
+            TOTAL=$((TOTAL + 1))
+
+            # Match: #123, GH-123, Fixes #123, Closes #123, Refs #123, etc.
+            if echo "$MSG" | grep -qEi '(#[0-9]+|GH-[0-9]+|[Ff]ix(es|ed)?[ :]+#[0-9]+|[Cc]lose[sd]?[ :]+#[0-9]+|[Rr]ef[s]?[ :]+#[0-9]+)'; then
+              ISSUE=$(echo "$MSG" | grep -oEi '#[0-9]+' | head -1)
+              echo "✓ ${SHORT} → ${ISSUE} — ${MSG}"
+              LINKED=$((LINKED + 1))
+            else
+              # Allow merge commits and CI/docs-only commits without issue refs
+              if echo "$MSG" | grep -qEi '^(merge|ci:|docs:|chore:)'; then
+                echo "~ ${SHORT} — ${MSG} (exempt)"
+              else
+                echo "✗ ${SHORT} — ${MSG}"
+                echo "  ⚠ No issue reference found. Use: #N, Fixes #N, Closes #N, Refs #N"
+                FAIL=$((FAIL + 1))
+              fi
+            fi
+          done <<< "$COMMITS"
+
+          echo ""
+          echo "## Summary: ${LINKED}/${TOTAL} commits linked to issues"
+
+          if [ "$FAIL" -gt 0 ]; then
+            echo ""
+            echo "::warning::${FAIL} commit(s) missing issue references. Link commits to issues for traceability."
+            # Warn but don't block — some hotfixes are legitimate
+            # Change 'exit 0' to 'exit 1' to enforce strictly
+            exit 0
+          fi
+
+  # ── Reciprocal: every open issue should have linked commits/PRs ──────
+  issue-has-commits:
+    name: Open issues have linked work
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit open issues for linked commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAX_STALE_DAYS: ${{ github.event.inputs.max-stale-days || '7' }}
+        run: |
+          set -euo pipefail
+
+          echo "## Issue Traceability Audit"
+          echo ""
+
+          STALE_CUTOFF=$(date -d "-${MAX_STALE_DAYS} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || date -v-${MAX_STALE_DAYS}d +%Y-%m-%dT%H:%M:%SZ)
+
+          # Get all open issues (not PRs)
+          ISSUES=$(gh issue list --state open --json number,title,createdAt,labels --limit 200)
+
+          TOTAL=$(echo "$ISSUES" | jq 'length')
+          LINKED=0
+          STALE=0
+          STALE_LIST=""
+
+          for i in $(seq 0 $((TOTAL - 1))); do
+            NUM=$(echo "$ISSUES" | jq -r ".[$i].number")
+            TITLE=$(echo "$ISSUES" | jq -r ".[$i].title")
+            CREATED=$(echo "$ISSUES" | jq -r ".[$i].createdAt")
+
+            # Check git log for references to this issue
+            COMMIT_COUNT=$(git log --all --oneline --grep="#${NUM}" | wc -l)
+
+            # Check for linked PRs
+            PR_COUNT=$(gh pr list --state all --search "#${NUM}" --json number --limit 10 | jq 'length')
+
+            TOTAL_REFS=$((COMMIT_COUNT + PR_COUNT))
+
+            if [ "$TOTAL_REFS" -gt 0 ]; then
+              RATIO="${TOTAL_REFS}:1"
+              echo "✓ #${NUM} — ${RATIO} — ${TITLE}"
+              LINKED=$((LINKED + 1))
+            else
+              # Is it stale (older than threshold)?
+              if [[ "$CREATED" < "$STALE_CUTOFF" ]]; then
+                echo "✗ #${NUM} — 0:1 STALE — ${TITLE} (opened ${CREATED:0:10})"
+                STALE=$((STALE + 1))
+                STALE_LIST="${STALE_LIST}\n  - #${NUM}: ${TITLE}"
+              else
+                echo "~ #${NUM} — 0:1 new — ${TITLE} (opened ${CREATED:0:10})"
+              fi
+            fi
+          done
+
+          echo ""
+          echo "## Summary"
+          echo "  Open issues: ${TOTAL}"
+          echo "  With linked work: ${LINKED}"
+          echo "  Stale (>${MAX_STALE_DAYS}d, no commits): ${STALE}"
+
+          if [ "$STALE" -gt 0 ]; then
+            echo ""
+            echo "::warning::${STALE} issue(s) have no linked commits or PRs after ${MAX_STALE_DAYS} days:"
+            echo -e "$STALE_LIST"
+          fi

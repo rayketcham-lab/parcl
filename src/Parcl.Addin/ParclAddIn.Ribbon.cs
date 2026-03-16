@@ -234,17 +234,26 @@ namespace Parcl.Addin
                     return;
                 }
 
+                string senderAddr;
+                try { senderAddr = mail.SenderEmailAddress ?? "(unknown)"; }
+                catch { senderAddr = "(unavailable)"; }
+
+                string subjectPreview;
+                try { subjectPreview = Truncate(mail.Subject, 30); }
+                catch { subjectPreview = "(unavailable)"; }
+
                 Logger.Info("Decrypt",
-                    $"Decrypt clicked — from: {mail.SenderEmailAddress}, " +
-                    $"subject: {Truncate(mail.Subject, 30)}");
+                    $"Decrypt clicked — from: {senderAddr}, subject: {subjectPreview}");
 
                 Outlook.Attachment? smimeAttachment = null;
+                int smimeAttachmentIndex = -1;
                 for (int i = 1; i <= mail.Attachments.Count; i++)
                 {
                     var att = mail.Attachments[i];
                     if (att.FileName.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
                     {
                         smimeAttachment = att;
+                        smimeAttachmentIndex = i;
                         break;
                     }
                 }
@@ -262,6 +271,8 @@ namespace Parcl.Addin
                     return;
                 }
 
+                bool isAtRest = smimeAttachment.FileName == "parcl-encrypted.p7m";
+
                 var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".p7m");
                 smimeAttachment.SaveAsFile(tempPath);
                 byte[] encryptedData;
@@ -274,50 +285,141 @@ namespace Parcl.Addin
                     try { File.Delete(tempPath); } catch { }
                 }
 
+                // ── Step 1: Decrypt the CMS envelope ──
                 var result = SmimeHandler.Decrypt(encryptedData);
-                if (result.Success && result.Content != null)
-                {
-                    bool isAtRest = smimeAttachment.FileName == "parcl-encrypted.p7m";
-                    string decryptedText = Encoding.UTF8.GetString(result.Content);
-
-                    mail.Body = decryptedText;
-
-                    // RFC 7508: restore protected headers from inside the envelope
-                    var protectedHeaders = Parcl.Core.Crypto.MimeBuilder.ExtractProtectedHeaders(decryptedText);
-                    if (protectedHeaders != null)
-                    {
-                        if (!string.IsNullOrEmpty(protectedHeaders.Subject))
-                        {
-                            mail.Subject = protectedHeaders.Subject;
-                            Logger.Info("Decrypt",
-                                $"Protected subject restored: {Truncate(protectedHeaders.Subject, 30)}");
-                        }
-                    }
-
-                    if (isAtRest)
-                    {
-                        for (int i = mail.Attachments.Count; i >= 1; i--)
-                        {
-                            if (mail.Attachments[i].FileName == "parcl-encrypted.p7m")
-                                mail.Attachments[i].Delete();
-                        }
-                        mail.Save();
-                    }
-
-                    Logger.Info("Decrypt",
-                        isAtRest ? "At-rest message decrypted and restored"
-                                 : "Attached .p7m decrypted successfully");
-                    MessageBox.Show("Message decrypted successfully.",
-                        "Parcl — Decrypted",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                else
+                if (!result.Success || result.Content == null)
                 {
                     Logger.Error("Decrypt", $"Decryption failed: {result.ErrorMessage}");
                     MessageBox.Show($"Decryption failed: {result.ErrorMessage}",
                         "Parcl — Decrypt Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
                 }
+
+                byte[] mimeBytes = result.Content;
+                Logger.Debug("Decrypt", $"CMS envelope decrypted: {mimeBytes.Length} bytes");
+
+                // ── Step 2: Unwrap SignedCms if present (sign-then-encrypt) ──
+                bool wasSigned = false;
+                string? signerInfo = null;
+                try
+                {
+                    var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();
+                    signedCms.Decode(mimeBytes);
+                    signedCms.CheckSignature(verifySignatureOnly: false);
+                    mimeBytes = signedCms.ContentInfo.Content;
+                    wasSigned = true;
+
+                    if (signedCms.SignerInfos.Count > 0 && signedCms.SignerInfos[0].Certificate != null)
+                    {
+                        var sigCert = signedCms.SignerInfos[0].Certificate!;
+                        signerInfo = sigCert.Subject;
+                        Logger.Info("Decrypt",
+                            $"Signature verified — signer: {sigCert.Subject}, " +
+                            $"thumbprint: {sigCert.Thumbprint.Substring(0, 8)}");
+                    }
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Not a SignedCms — content is raw MIME, which is fine (encrypt-only)
+                    Logger.Debug("Decrypt", "Content is not signed (encrypt-only)");
+                }
+
+                // ── Step 3: Parse the MIME content to extract actual body ──
+                string mimeText = Encoding.UTF8.GetString(mimeBytes);
+
+                // Extract protected headers (RFC 7508)
+                var protectedHeaders = Parcl.Core.Crypto.MimeBuilder.ExtractProtectedHeaders(mimeText);
+
+                // Extract the actual body (HTML or plain text) and attachments
+                var extracted = Parcl.Core.Crypto.MimeBuilder.ExtractBody(mimeText);
+
+                if (extracted.HasContent)
+                {
+                    // Restore the actual message body
+                    if (!string.IsNullOrEmpty(extracted.HtmlBody))
+                    {
+                        mail.HTMLBody = extracted.HtmlBody;
+                        Logger.Debug("Decrypt", "HTML body restored from MIME");
+                    }
+                    else if (!string.IsNullOrEmpty(extracted.TextBody))
+                    {
+                        mail.Body = extracted.TextBody;
+                        Logger.Debug("Decrypt", "Plain text body restored from MIME");
+                    }
+                }
+                else
+                {
+                    // Fallback: set as plain text (shouldn't happen with well-formed MIME)
+                    mail.Body = mimeText;
+                    Logger.Warn("Decrypt", "Could not parse MIME structure — set raw content as body");
+                }
+
+                // Restore protected subject
+                if (protectedHeaders != null && !string.IsNullOrEmpty(protectedHeaders.Subject))
+                {
+                    mail.Subject = protectedHeaders.Subject;
+                    Logger.Info("Decrypt",
+                        $"Protected subject restored: {Truncate(protectedHeaders.Subject, 30)}");
+                }
+
+                // Remove the .p7m attachment
+                for (int i = mail.Attachments.Count; i >= 1; i--)
+                {
+                    var fn = mail.Attachments[i].FileName;
+                    if (fn.Equals("smime.p7m", StringComparison.OrdinalIgnoreCase) ||
+                        fn.Equals("parcl-encrypted.p7m", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mail.Attachments[i].Delete();
+                    }
+                }
+
+                // Re-add any attachments that were inside the encrypted envelope
+                foreach (var att in extracted.Attachments)
+                {
+                    var attTempPath = Path.Combine(
+                        Path.GetTempPath(), Path.GetRandomFileName() + "_" + att.FileName);
+                    try
+                    {
+                        File.WriteAllBytes(attTempPath, att.Data);
+                        mail.Attachments.Add(attTempPath,
+                            Outlook.OlAttachmentType.olByValue,
+                            Type.Missing, att.FileName);
+                        Logger.Debug("Decrypt", $"Attachment restored: {att.FileName}");
+                    }
+                    finally
+                    {
+                        try { File.Delete(attTempPath); } catch { }
+                    }
+                }
+
+                // Reset message class back to normal
+                try
+                {
+                    const string PR_MESSAGE_CLASS = "http://schemas.microsoft.com/mapi/proptag/0x001A001E";
+                    mail.PropertyAccessor.SetProperty(PR_MESSAGE_CLASS, "IPM.Note");
+                }
+                catch { }
+
+                mail.Save();
+
+                // Build result message
+                var status = new StringBuilder("Message decrypted successfully.");
+                if (wasSigned)
+                    status.Append($"\n\nSignature verified: {signerInfo ?? "Unknown signer"}");
+                if (protectedHeaders?.Subject != null)
+                    status.Append($"\nOriginal subject restored.");
+                if (extracted.Attachments.Count > 0)
+                    status.Append($"\n{extracted.Attachments.Count} attachment(s) restored.");
+
+                Logger.Info("Decrypt",
+                    $"Message fully decrypted and restored" +
+                    (wasSigned ? " (signed)" : "") +
+                    $" — {extracted.Attachments.Count} attachment(s)");
+
+                MessageBox.Show(status.ToString(),
+                    "Parcl — Decrypted",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -592,6 +694,23 @@ namespace Parcl.Addin
             Logger.Info("Encrypt",
                 $"Encrypt at rest — subject: {Truncate(mail.Subject, 30)}");
 
+            // Check if this message is already S/MIME encrypted (has smime.p7m or parcl-encrypted.p7m)
+            for (int i = 1; i <= mail.Attachments.Count; i++)
+            {
+                var fn = mail.Attachments[i].FileName;
+                if (fn.Equals("smime.p7m", StringComparison.OrdinalIgnoreCase) ||
+                    fn.Equals("parcl-encrypted.p7m", StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Info("Encrypt", "Message is already encrypted — skipping encrypt-at-rest");
+                    MessageBox.Show(
+                        "This message is already encrypted.\n\n" +
+                        "Use Decrypt first if you want to re-encrypt it at rest.",
+                        "Parcl — Already Encrypted",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+            }
+
             var thumbprint = Settings.UserProfile.EncryptionCertThumbprint;
             if (string.IsNullOrEmpty(thumbprint))
             {
@@ -613,7 +732,19 @@ namespace Parcl.Addin
                 return;
             }
 
-            var bodyBytes = Encoding.UTF8.GetBytes(mail.Body ?? string.Empty);
+            var body = mail.Body ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                Logger.Warn("Encrypt", "Cannot encrypt at rest — message body is empty");
+                MessageBox.Show(
+                    "Cannot encrypt an empty message.\n\n" +
+                    "The message body has no content to encrypt.",
+                    "Parcl — Encrypt",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var bodyBytes = Encoding.UTF8.GetBytes(body);
             var recipientCerts = new X509Certificate2Collection { cert };
             var encrypted = SmimeHandler.Encrypt(bodyBytes, recipientCerts);
 
@@ -944,14 +1075,18 @@ namespace Parcl.Addin
                     CertStore.PublishToAddressBook(cert);
                     imported++;
 
+                    string importSender;
+                    try { importSender = mail.SenderEmailAddress ?? ""; }
+                    catch { importSender = ""; }
+
                     Logger.Info("Import",
                         $"Certificate imported from attachment: {info.Subject} " +
-                        $"[{info.Thumbprint.Substring(0, 8)}] from {mail.SenderEmailAddress}");
+                        $"[{info.Thumbprint.Substring(0, 8)}] from {importSender}");
 
                     // Cache it for the sender
-                    if (!string.IsNullOrEmpty(mail.SenderEmailAddress))
+                    if (!string.IsNullOrEmpty(importSender))
                     {
-                        CertCache.Add(mail.SenderEmailAddress,
+                        CertCache.Add(importSender,
                             new List<Parcl.Core.Models.CertificateInfo> { info });
                     }
                 }
