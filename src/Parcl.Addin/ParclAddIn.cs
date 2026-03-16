@@ -290,7 +290,7 @@ namespace Parcl.Addin
             {
                 var att = mail.Attachments[i];
                 var tempAtt = System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(), $"parcl-att-{i}-{att.FileName}");
+                    System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + System.IO.Path.GetExtension(att.FileName));
                 try
                 {
                     att.SaveAsFile(tempAtt);
@@ -323,7 +323,7 @@ namespace Parcl.Addin
 
             // 4. Store encrypted CMS blob
             var tempPath = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(), "parcl-smime.p7m");
+                System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + ".p7m");
             System.IO.File.WriteAllBytes(tempPath, encrypted);
 
             mail.Attachments.Add(tempPath,

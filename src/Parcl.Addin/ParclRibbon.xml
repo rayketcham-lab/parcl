@@ -76,6 +76,13 @@
                   size="large"
                   image="btnOptions"
                   onAction="OnOptionsClick" />
+          <button id="btnAbout"
+                  label="About"
+                  screentip="About Parcl"
+                  supertip="Version info, support, and links."
+                  size="normal"
+                  image="btnOptions"
+                  onAction="OnAboutClick" />
         </group>
       </tab>
     </tabs>

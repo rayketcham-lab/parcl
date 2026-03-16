@@ -262,7 +262,7 @@ namespace Parcl.Addin
                     return;
                 }
 
-                var tempPath = Path.Combine(Path.GetTempPath(), "parcl-decrypt.p7m");
+                var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".p7m");
                 smimeAttachment.SaveAsFile(tempPath);
                 byte[] encryptedData;
                 try
@@ -348,7 +348,7 @@ namespace Parcl.Addin
 
                         var extension = dialog.AttachAsPem ? ".pem" : ".cer";
                         var tempFile = Path.Combine(
-                            Path.GetTempPath(), $"parcl-cert{extension}");
+                            Path.GetTempPath(), Path.GetRandomFileName() + extension);
                         File.WriteAllBytes(tempFile, attachment);
 
                         mail.Attachments.Add(tempFile,
@@ -482,6 +482,19 @@ namespace Parcl.Addin
             return false;
         }
 
+        public void OnAboutClick(IRibbonControl control)
+        {
+            try
+            {
+                using (var dialog = new Dialogs.AboutDialog())
+                    dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("About", "About dialog failed", ex);
+            }
+        }
+
         public void OnOptionsClick(IRibbonControl control)
         {
             try
@@ -591,7 +604,7 @@ namespace Parcl.Addin
             var recipientCerts = new X509Certificate2Collection { cert };
             var encrypted = SmimeHandler.Encrypt(bodyBytes, recipientCerts);
 
-            var tempPath = Path.Combine(Path.GetTempPath(), "parcl-atrest.p7m");
+            var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".p7m");
             File.WriteAllBytes(tempPath, encrypted);
 
             mail.Body = "[Parcl] This message has been encrypted at rest.\n" +

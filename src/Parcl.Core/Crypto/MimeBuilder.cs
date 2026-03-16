@@ -50,10 +50,11 @@ namespace Parcl.Core.Crypto
             // Attachment parts
             foreach (var att in attachments!)
             {
+                var safeName = SanitizeFilename(att.FileName);
                 sb.AppendLine($"--{boundary}");
-                sb.AppendLine($"Content-Type: application/octet-stream; name=\"{att.FileName}\"");
+                sb.AppendLine($"Content-Type: application/octet-stream; name=\"{safeName}\"");
                 sb.AppendLine("Content-Transfer-Encoding: base64");
-                sb.AppendLine($"Content-Disposition: attachment; filename=\"{att.FileName}\"");
+                sb.AppendLine($"Content-Disposition: attachment; filename=\"{safeName}\"");
                 sb.AppendLine();
                 sb.AppendLine(WrapBase64(Convert.ToBase64String(att.Data)));
             }
@@ -72,6 +73,25 @@ namespace Parcl.Core.Crypto
             sb.AppendLine();
             sb.AppendLine(WrapBase64(Convert.ToBase64String(body)));
             return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        /// <summary>
+        /// Strips CR, LF, NUL, and double-quote characters from filenames
+        /// to prevent MIME header injection.
+        /// </summary>
+        public static string SanitizeFilename(string filename)
+        {
+            if (string.IsNullOrEmpty(filename))
+                return filename;
+
+            var sb = new StringBuilder(filename.Length);
+            foreach (char c in filename)
+            {
+                if (c == '\r' || c == '\n' || c == '\0' || c == '"')
+                    continue;
+                sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         private static string WrapBase64(string b64)
