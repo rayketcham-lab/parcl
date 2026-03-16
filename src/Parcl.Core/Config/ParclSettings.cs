@@ -61,6 +61,14 @@ namespace Parcl.Core.Config
         public bool AlwaysSign { get; set; }
         public bool AlwaysEncrypt { get; set; }
         public CertValidationMode ValidationMode { get; set; } = CertValidationMode.Relaxed;
+
+        /// <summary>
+        /// When true, uses Outlook's native S/MIME engine (PR_SECURITY_FLAGS) for encryption.
+        /// This produces standard S/MIME messages that any client (Entrust, native Outlook, etc.)
+        /// can decrypt. When false, uses Parcl's own CMS envelope (smime.p7m attachment) which
+        /// supports protected headers (RFC 7508) but requires Parcl on the receiving end.
+        /// </summary>
+        public bool UseNativeSmime { get; set; } = true;
     }
 
     public enum CertValidationMode

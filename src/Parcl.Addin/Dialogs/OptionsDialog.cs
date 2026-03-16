@@ -24,6 +24,7 @@ namespace Parcl.Addin.Dialogs
         private CheckBox _ldapSsl = null!;
 
         // Crypto controls
+        private CheckBox _useNativeSmime = null!;
         private ComboBox _encAlgo = null!;
         private ComboBox _hashAlgo = null!;
         private ComboBox _certValidation = null!;
@@ -170,9 +171,23 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 5,
-                Height = 190,
+                RowCount = 7,
+                Height = 260,
                 Padding = new Padding(12)
+            };
+
+            _useNativeSmime = new CheckBox
+            {
+                Text = "Use native Outlook S/MIME (compatible with Entrust, etc.)",
+                AutoSize = true
+            };
+
+            var nativeHint = new Label
+            {
+                Text = "Native mode lets any S/MIME client decrypt. Parcl mode adds protected headers but requires Parcl.",
+                ForeColor = System.Drawing.Color.Gray,
+                Font = new System.Drawing.Font("Segoe UI", 8),
+                AutoSize = true
             };
 
             _encAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -187,12 +202,16 @@ namespace Parcl.Addin.Dialogs
             _alwaysSign = new CheckBox { Text = "Always sign outgoing messages" };
             _alwaysEncrypt = new CheckBox { Text = "Always encrypt outgoing messages" };
 
-            AddRow(panel, 0, "Encryption Algorithm:", _encAlgo);
-            AddRow(panel, 1, "Hash Algorithm:", _hashAlgo);
-            AddRow(panel, 2, "Certificate Validation:", _certValidation);
-            panel.Controls.Add(_alwaysSign, 0, 3);
+            panel.Controls.Add(_useNativeSmime, 0, 0);
+            panel.SetColumnSpan(_useNativeSmime, 2);
+            panel.Controls.Add(nativeHint, 0, 1);
+            panel.SetColumnSpan(nativeHint, 2);
+            AddRow(panel, 2, "Encryption Algorithm:", _encAlgo);
+            AddRow(panel, 3, "Hash Algorithm:", _hashAlgo);
+            AddRow(panel, 4, "Certificate Validation:", _certValidation);
+            panel.Controls.Add(_alwaysSign, 0, 5);
             panel.SetColumnSpan(_alwaysSign, 2);
-            panel.Controls.Add(_alwaysEncrypt, 0, 4);
+            panel.Controls.Add(_alwaysEncrypt, 0, 6);
             panel.SetColumnSpan(_alwaysEncrypt, 2);
 
             tab.Controls.Add(panel);
@@ -276,6 +295,7 @@ namespace Parcl.Addin.Dialogs
             }
 
             // Load crypto settings
+            _useNativeSmime.Checked = _settings.Crypto.UseNativeSmime;
             _encAlgo.SelectedItem = _settings.Crypto.EncryptionAlgorithm;
             _hashAlgo.SelectedItem = _settings.Crypto.HashAlgorithm;
             _certValidation.SelectedIndex = (int)_settings.Crypto.ValidationMode;
@@ -296,6 +316,7 @@ namespace Parcl.Addin.Dialogs
 
         private void OkButton_Click(object? sender, EventArgs e)
         {
+            _settings.Crypto.UseNativeSmime = _useNativeSmime.Checked;
             _settings.Crypto.EncryptionAlgorithm = _encAlgo.SelectedItem?.ToString() ?? "AES-256-CBC";
             _settings.Crypto.HashAlgorithm = _hashAlgo.SelectedItem?.ToString() ?? "SHA-256";
             _settings.Crypto.ValidationMode = (CertValidationMode)_certValidation.SelectedIndex;

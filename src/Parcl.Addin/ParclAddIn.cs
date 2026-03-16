@@ -327,21 +327,59 @@ namespace Parcl.Addin
 
                 if (shouldEncrypt)
                 {
-                    Logger.Info("Send", "Encapsulating message in S/MIME envelope"
-                        + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
-
-                    string? encryptError = EncapsulateMessage(mail, shouldSign);
-                    if (encryptError != null)
+                    if (Settings.Crypto.UseNativeSmime)
                     {
-                        cancel = true;
-                        Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
-                        MessageBox.Show(
-                            $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
-                            "Fix the issue or remove encryption before sending.",
-                            "Parcl — Send Blocked",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
-                        return;
+                        // ── Native S/MIME: let Outlook handle encryption ──
+                        // This produces standard S/MIME that any client (Entrust, native Outlook,
+                        // Thunderbird, etc.) can decrypt. Outlook uses the recipient's cert from
+                        // the Windows store and formats the CMS envelope in the MAPI body.
+                        Logger.Info("Send", "Using Outlook native S/MIME encryption"
+                            + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
+
+                        const string PR_SECURITY_FLAGS_NATIVE =
+                            "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                        const int SECFLAG_ENCRYPTED_NATIVE = 0x01;
+                        const int SECFLAG_SIGNED_NATIVE = 0x02;
+
+                        var pa = mail.PropertyAccessor;
+                        int flags;
+                        try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS_NATIVE); }
+                        catch { flags = 0; }
+
+                        flags |= SECFLAG_ENCRYPTED_NATIVE;
+                        if (shouldSign)
+                            flags |= SECFLAG_SIGNED_NATIVE;
+
+                        pa.SetProperty(PR_SECURITY_FLAGS_NATIVE, flags);
+
+                        // Clear Parcl flags — Outlook handles from here
+                        var encFlag = mail.UserProperties.Find("ParclEncrypt");
+                        if (encFlag != null) encFlag.Value = false;
+                        var sigFlag = mail.UserProperties.Find("ParclSign");
+                        if (sigFlag != null) sigFlag.Value = false;
+
+                        Logger.Info("Send",
+                            $"Native S/MIME flags set: encrypt={shouldEncrypt}, sign={shouldSign} (0x{flags:X})");
+                    }
+                    else
+                    {
+                        // ── Parcl envelope: our own CMS encryption with protected headers ──
+                        Logger.Info("Send", "Using Parcl S/MIME envelope"
+                            + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
+
+                        string? encryptError = EncapsulateMessage(mail, shouldSign);
+                        if (encryptError != null)
+                        {
+                            cancel = true;
+                            Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
+                            MessageBox.Show(
+                                $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
+                                "Fix the issue or remove encryption before sending.",
+                                "Parcl — Send Blocked",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+                            return;
+                        }
                     }
                 }
                 else if (shouldSign)

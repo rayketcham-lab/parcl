@@ -1,0 +1,98 @@
+name: PII Protection
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pii-scan:
+    name: Scan for PII and secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for email addresses in source code
+        run: |
+          set -euo pipefail
+
+          echo "## PII Scan - Email Addresses"
+          echo ""
+
+          # Scan source files for email addresses (exclude test data, configs, and expected patterns)
+          VIOLATIONS=0
+
+          # Pattern: anything@domain.tld in .cs, .xml, .yml, .yaml, .json, .md files
+          # Exclude: test files with @example.com, CLAUDE.md, README, license headers,
+          #          noreply@, alerts@, schema URLs, and NuGet config
+          EMAILS=$(grep -rn --include='*.cs' --include='*.xml' --include='*.yml' \
+            --include='*.yaml' --include='*.json' --include='*.md' \
+            -Ei '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}' . \
+            | grep -vi '@example\.com' \
+            | grep -vi '@anthropic\.com' \
+            | grep -vi 'noreply@' \
+            | grep -vi 'alerts@' \
+            | grep -vi '@schemas\.microsoft\.com' \
+            | grep -vi '@nuget' \
+            | grep -vi 'CLAUDE\.md' \
+            | grep -vi 'README\.md' \
+            | grep -vi 'LICENSE' \
+            | grep -vi '\.github/workflows/' \
+            | grep -vi 'test-e2e\.ps1' \
+            | grep -vi 'packages\.config' \
+            | grep -vi 'nuget\.config' \
+            || true)
+
+          if [ -n "$EMAILS" ]; then
+            echo "::warning::Found email addresses in source code. Review for PII:"
+            echo "$EMAILS" | head -20
+            VIOLATIONS=$(echo "$EMAILS" | wc -l)
+          fi
+
+          echo ""
+          echo "## PII Scan - Private Keys and Secrets"
+
+          # Scan for private key material
+          SECRETS=$(grep -rn --include='*.cs' --include='*.json' --include='*.xml' \
+            --include='*.yml' --include='*.yaml' --include='*.config' \
+            -Ei '(BEGIN (RSA |EC )?PRIVATE KEY|password\s*=\s*"[^"]+"|api[_-]?key\s*=|secret\s*=\s*"[^"]+"|AKIA[0-9A-Z]{16})' . \
+            | grep -vi 'CredentialProtector' \
+            | grep -vi 'UseSystemPasswordChar' \
+            | grep -vi 'BindPassword' \
+            | grep -vi '\.github/workflows/' \
+            | grep -vi 'test' \
+            || true)
+
+          if [ -n "$SECRETS" ]; then
+            echo "::error::Found potential secrets in source code!"
+            echo "$SECRETS" | head -10
+            VIOLATIONS=$((VIOLATIONS + $(echo "$SECRETS" | wc -l)))
+          fi
+
+          echo ""
+          echo "## PII Scan - Thumbprints and Certificate Identifiers"
+
+          # Scan for hardcoded certificate thumbprints (40-char hex strings)
+          THUMBPRINTS=$(grep -rn --include='*.cs' --include='*.json' \
+            -E '[0-9A-Fa-f]{40}' . \
+            | grep -vi 'test' \
+            | grep -vi '\.github/' \
+            | grep -vi 'FindByThumbprint' \
+            | grep -vi 'Thumbprint' \
+            | grep -vi 'GetRandomFileName' \
+            || true)
+
+          if [ -n "$THUMBPRINTS" ]; then
+            echo "::warning::Found potential hardcoded certificate thumbprints:"
+            echo "$THUMBPRINTS" | head -10
+          fi
+
+          echo ""
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::warning::Found $VIOLATIONS potential PII item(s). Review above."
+            # Warn but don't block — some may be false positives
+            # Change to 'exit 1' to enforce strictly
+          else
+            echo "No PII violations found."
+          fi
