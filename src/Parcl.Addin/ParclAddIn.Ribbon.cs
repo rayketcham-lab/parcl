@@ -640,6 +640,20 @@ namespace Parcl.Addin
             }
         }
 
+        public void OnCertContactsClick(IRibbonControl control)
+        {
+            try
+            {
+                Logger.Info("CertContacts", "Certificate contacts dialog opening");
+                using (var dialog = new Dialogs.CertContactsDialog())
+                    dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("CertContacts", "Certificate contacts dialog failed", ex);
+            }
+        }
+
         public void OnOptionsClick(IRibbonControl control)
         {
             try

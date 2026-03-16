@@ -52,6 +52,13 @@
                   size="normal"
                   image="btnCertExchange"
                   onAction="OnImportCertificatesClick" />
+          <button id="btnCertContacts"
+                  label="Contacts"
+                  screentip="Certificate Contacts"
+                  supertip="View and manage certificates for your contacts."
+                  size="normal"
+                  image="btnCertSelector"
+                  onAction="OnCertContactsClick" />
           <button id="btnLookup"
                   label="Lookup"
                   screentip="Lookup recipient certificates"
