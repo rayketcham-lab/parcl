@@ -330,11 +330,63 @@ namespace Parcl.Addin
                     if (Settings.Crypto.UseNativeSmime)
                     {
                         // ── Native S/MIME: let Outlook handle encryption ──
-                        // This produces standard S/MIME that any client (Entrust, native Outlook,
-                        // Thunderbird, etc.) can decrypt. Outlook uses the recipient's cert from
-                        // the Windows store and formats the CMS envelope in the MAPI body.
-                        Logger.Info("Send", "Using Outlook native S/MIME encryption"
+                        // Uses PR_SECURITY_FLAGS so Outlook formats proper S/MIME that any
+                        // client (Entrust, native Outlook, Thunderbird) can decrypt.
+                        // But first: publish certs to recipients so Outlook can find them.
+                        // Outlook's native engine only checks AddressEntry.PR_USER_X509_CERTIFICATE,
+                        // not the Windows cert store — so we bridge the gap using Parcl's
+                        // flexible cert resolution (RDN, SAN, CN matching).
+                        Logger.Info("Send", "Using Outlook native S/MIME"
                             + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
+
+                        int publishedCount = 0;
+                        for (int i = 1; i <= mail.Recipients.Count; i++)
+                        {
+                            var recipient = mail.Recipients[i];
+                            var smtpAddr = ResolveSmtpAddress(recipient);
+                            Logger.Debug("Send", $"Publishing cert to AddressEntry for {smtpAddr}");
+
+                            // Use Parcl's flexible resolution (handles RDN/SAN/CN mismatch)
+                            var cert = ResolveRecipientCert(smtpAddr, recipient);
+                            if (cert == null)
+                            {
+                                Logger.Warn("Send",
+                                    $"No cert found for {smtpAddr} — native S/MIME may fail");
+                                // cert missing or expired — native may prompt user
+                                continue;
+                            }
+
+                            if (cert.NotAfter <= DateTime.UtcNow)
+                            {
+                                Logger.Warn("Send",
+                                    $"Cert expired for {smtpAddr} (expired {cert.NotAfter:yyyy-MM-dd})");
+                                // cert missing or expired — native may prompt user
+                                continue;
+                            }
+
+                            // Publish cert to AddressEntry so Outlook's native engine finds it
+                            try
+                            {
+                                var addrEntry = recipient.AddressEntry;
+                                if (addrEntry != null)
+                                {
+                                    var certBytes = cert.Export(
+                                        System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
+                                    addrEntry.PropertyAccessor.SetProperty(
+                                        PR_USER_X509_CERT,
+                                        new object[] { certBytes });
+                                    publishedCount++;
+                                    Logger.Info("Send",
+                                        $"Cert published to AddressEntry for {smtpAddr}: " +
+                                        $"{cert.Subject}, expires {cert.NotAfter:yyyy-MM-dd}");
+                                }
+                            }
+                            catch (Exception pubEx)
+                            {
+                                Logger.Warn("Send",
+                                    $"Could not publish cert to AddressEntry for {smtpAddr}: {pubEx.Message}");
+                            }
+                        }
 
                         const string PR_SECURITY_FLAGS_NATIVE =
                             "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
@@ -359,7 +411,8 @@ namespace Parcl.Addin
                         if (sigFlag != null) sigFlag.Value = false;
 
                         Logger.Info("Send",
-                            $"Native S/MIME flags set: encrypt={shouldEncrypt}, sign={shouldSign} (0x{flags:X})");
+                            $"Native S/MIME flags set: encrypt=true, sign={shouldSign} (0x{flags:X}), " +
+                            $"{publishedCount}/{mail.Recipients.Count} certs published to AddressEntry");
                     }
                     else
                     {

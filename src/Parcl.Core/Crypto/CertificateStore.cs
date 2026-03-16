@@ -100,7 +100,7 @@ namespace Parcl.Core.Crypto
 
         private static bool CertContainsEmail(X509Certificate2 cert, string email)
         {
-            // Check Subject DN for email-like content
+            // Check Subject DN for email-like content (E= field or inline)
             if (cert.Subject != null &&
                 cert.Subject.ToLowerInvariant().Contains(email))
                 return true;
@@ -112,6 +112,43 @@ namespace Parcl.Core.Crypto
                 {
                     var san = ext.Format(false).ToLowerInvariant();
                     if (san.Contains(email))
+                        return true;
+                }
+            }
+
+            // Check RDN components: extract CN from subject and match against
+            // the local part of the email or the display name.
+            // Handles enterprise certs where CN="James R Ketcham" but email
+            // is james.r.ketcham@rtx.com (dot-separated name convention).
+            if (cert.Subject != null && email.Contains("@"))
+            {
+                var localPart = email.Substring(0, email.IndexOf('@')).ToLowerInvariant();
+
+                // Parse CN from subject DN (e.g., "CN=James R Ketcham + uid=...")
+                var subject = cert.Subject;
+                int cnStart = subject.IndexOf("CN=", StringComparison.OrdinalIgnoreCase);
+                if (cnStart >= 0)
+                {
+                    cnStart += 3;
+                    int cnEnd = subject.IndexOfAny(new[] { ',', '+' }, cnStart);
+                    if (cnEnd < 0) cnEnd = subject.Length;
+                    var cn = subject.Substring(cnStart, cnEnd - cnStart).Trim().ToLowerInvariant();
+
+                    // Match: "james.r.ketcham" vs "james r ketcham" (dots = spaces)
+                    var cnNormalized = cn.Replace(" ", ".").Replace("-", ".");
+                    if (cnNormalized == localPart || cn.Replace(" ", "") == localPart.Replace(".", ""))
+                        return true;
+                }
+
+                // Also check E= field in subject DN
+                int eStart = subject.IndexOf("E=", StringComparison.OrdinalIgnoreCase);
+                if (eStart >= 0)
+                {
+                    eStart += 2;
+                    int eEnd = subject.IndexOfAny(new[] { ',', '+', ' ' }, eStart);
+                    if (eEnd < 0) eEnd = subject.Length;
+                    var emailInDn = subject.Substring(eStart, eEnd - eStart).Trim().ToLowerInvariant();
+                    if (emailInDn == email)
                         return true;
                 }
             }
