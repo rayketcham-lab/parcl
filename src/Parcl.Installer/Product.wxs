@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Parcl — Outlook Certificate Manager"
+           Manufacturer="Parcl"
+           Version="1.1.0.0"
+           UpgradeCode="DED99D32-7858-43E9-8E22-796DD1586354"
+           Compressed="yes"
+           InstallerVersion="500"
+           Scope="perUser">
+
+    <SummaryInformation Description="Parcl S/MIME certificate manager add-in for Microsoft Outlook" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Parcl is already installed."
+                  Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Allow silent uninstall via: msiexec /x Parcl.Installer.msi /qn -->
+    <!-- Allow reinstall via:        msiexec /i Parcl.Installer.msi REINSTALL=ALL REINSTALLMODE=vomus /qn -->
+    <Property Id="REINSTALLMODE" Value="vomus" />
+
+    <!-- Per-user install directory under Local AppData -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Parcl">
+        <Directory Id="AddinDir" Name="Addin" />
+      </Directory>
+    </StandardDirectory>
+
+    <!--
+      Per-user profile components must use HKCU registry KeyPath (ICE38).
+      Each file component gets a companion registry value as its KeyPath.
+    -->
+
+    <!-- Add-in DLLs -->
+    <ComponentGroup Id="AddinFiles" Directory="AddinDir">
+      <Component Id="ParclAddinDll" Guid="CC342545-0334-4392-AB5D-9A79A45127BE">
+        <File Id="ParclAddinDll" Source="$(var.AddinSourceDir)\Parcl.Addin.dll" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="AddinDll" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="ParclCoreDll" Guid="AC3A4F14-5063-4E07-86CC-F82893B792D7">
+        <File Id="ParclCoreDll" Source="$(var.AddinSourceDir)\Parcl.Core.dll" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="CoreDll" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="NewtonsoftJsonDll" Guid="E7E6E707-C7A9-4436-A3BF-D43B75CF95E1">
+        <File Id="NewtonsoftJsonDll" Source="$(var.AddinSourceDir)\Newtonsoft.Json.dll" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="JsonDll" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="OutlookInteropDll" Guid="AA6B1C3B-D251-4B6B-9C23-15178F58D98E">
+        <File Id="OutlookInteropDll" Source="$(var.AddinSourceDir)\Microsoft.Office.Interop.Outlook.dll" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="InteropDll" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- COM class registration (HKCU — per-user, no admin) -->
+    <ComponentGroup Id="ComRegistration" Directory="AddinDir">
+      <Component Id="ComClassReg" Guid="A1B2C3D4-E5F6-4789-AB01-234567890ABC">
+        <!-- ProgId → CLSID mapping -->
+        <RegistryKey Root="HKCU" Key="Software\Classes\Parcl.Addin">
+          <RegistryValue Type="string" Value="Parcl.Addin.ParclAddIn" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\Parcl.Addin\CLSID">
+          <RegistryValue Type="string" Value="{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}" />
+        </RegistryKey>
+
+        <!-- CLSID registration for .NET COM interop -->
+        <RegistryKey Root="HKCU" Key="Software\Classes\CLSID\{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}">
+          <RegistryValue Type="string" Value="Parcl.Addin.ParclAddIn" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\CLSID\{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}\InprocServer32">
+          <RegistryValue Type="string" Value="mscoree.dll" />
+          <RegistryValue Name="ThreadingModel" Type="string" Value="Both" />
+          <RegistryValue Name="Class" Type="string" Value="Parcl.Addin.ParclAddIn" />
+          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+          <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
+          <RegistryValue Name="CodeBase" Type="string" Value="file:///[AddinDir]Parcl.Addin.dll" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\CLSID\{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}\InprocServer32\1.0.0.0">
+          <RegistryValue Name="Class" Type="string" Value="Parcl.Addin.ParclAddIn" />
+          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+          <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
+          <RegistryValue Name="CodeBase" Type="string" Value="file:///[AddinDir]Parcl.Addin.dll" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\CLSID\{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}\ProgId">
+          <RegistryValue Type="string" Value="Parcl.Addin" />
+        </RegistryKey>
+
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="ComReg" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Outlook COM Add-in registry (HKCU only — no Manifest value needed) -->
+    <ComponentGroup Id="OutlookAddinReg" Directory="AddinDir">
+      <Component Id="OutlookAddinRegComp" Guid="3F8A2B1C-94D7-4E5F-B6A8-C12D3E4F5A6B">
+        <RegistryKey Root="HKCU" Key="Software\Microsoft\Office\Outlook\Addins\Parcl.Addin">
+          <RegistryValue Name="FriendlyName" Type="string" Value="Parcl — S/MIME Certificate Manager" />
+          <RegistryValue Name="Description" Type="string" Value="Outlook add-in for S/MIME certificate management, encryption, signing, and LDAP lookup" />
+          <RegistryValue Name="LoadBehavior" Type="integer" Value="3" />
+        </RegistryKey>
+        <!-- Remove stale VSTO Manifest value left by previous installer -->
+        <RemoveRegistryValue Root="HKCU" Key="Software\Microsoft\Office\Outlook\Addins\Parcl.Addin" Name="Manifest" />
+        <!-- Tell Outlook not to auto-disable this add-in -->
+        <RegistryValue Root="HKCU" Key="Software\Microsoft\Office\16.0\Outlook\Resiliency\DoNotDisableAddinList"
+                       Name="Parcl.Addin" Type="integer" Value="1" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="OutlookReg" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Clean up directories on uninstall -->
+    <ComponentGroup Id="Cleanup" Directory="AddinDir">
+      <Component Id="CleanupDirs" Guid="D7851922-04E6-43FF-9586-2024E209CD97">
+        <RemoveFolder Id="RemoveAddinDir" Directory="AddinDir" On="uninstall" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Parcl\Install" Name="Cleanup" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="ProductFeature" Title="Parcl Add-in" Level="1">
+      <ComponentGroupRef Id="AddinFiles" />
+      <ComponentGroupRef Id="ComRegistration" />
+      <ComponentGroupRef Id="OutlookAddinReg" />
+      <ComponentGroupRef Id="Cleanup" />
+    </Feature>
+
+  </Package>
+</Wix>

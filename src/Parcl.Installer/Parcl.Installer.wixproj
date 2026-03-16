@@ -1,0 +1,8 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <DefineConstants>AddinSourceDir=$(MSBuildThisFileDirectory)..\Parcl.Addin\bin\$(Configuration)\net48</DefineConstants>
+  </PropertyGroup>
+</Project>

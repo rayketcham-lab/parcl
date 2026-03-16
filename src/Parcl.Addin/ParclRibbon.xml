@@ -1,30 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui"
-          onLoad="Ribbon_Load">
+          onLoad="Ribbon_Load"
+          loadImage="GetButtonImage">
   <ribbon>
     <tabs>
-      <tab id="ParclTab" label="Parcl" insertAfterMso="TabMessage">
+      <tab id="ParclTab" label="Parcl" insertAfterMso="TabMail">
         <group id="grpSecurity" label="Security">
           <button id="btnEncrypt"
                   label="Encrypt"
                   screentip="Encrypt this message"
                   supertip="Encrypt the message using recipient certificates found via LDAP or local store."
                   size="large"
-                  imageMso="EncryptMessage"
+                  image="btnEncrypt"
                   onAction="OnEncryptClick" />
           <button id="btnDecrypt"
                   label="Decrypt"
                   screentip="Decrypt this message"
                   supertip="Decrypt an encrypted message using your private key."
                   size="large"
-                  imageMso="DecryptMessage"
+                  image="btnDecrypt"
                   onAction="OnDecryptClick" />
           <button id="btnSign"
                   label="Sign"
                   screentip="Digitally sign this message"
                   supertip="Apply a digital signature using your signing certificate."
                   size="large"
-                  imageMso="DigitalSignatureLineSignatureSetup"
+                  image="btnSign"
                   onAction="OnSignClick" />
         </group>
         <group id="grpCertificates" label="Certificates">
@@ -33,21 +34,21 @@
                   screentip="Send your certificate"
                   supertip="Attach your public certificate to this message so the recipient can send you encrypted email."
                   size="large"
-                  imageMso="CertificationAuthority"
+                  image="btnCertExchange"
                   onAction="OnCertExchangeClick" />
           <button id="btnCertSelector"
                   label="Select Certificates"
                   screentip="Choose your certificates"
                   supertip="Select which certificates to use for signing and encryption."
                   size="large"
-                  imageMso="CertificationAuthority"
+                  image="btnCertSelector"
                   onAction="OnCertSelectorClick" />
           <button id="btnLookup"
                   label="Lookup"
                   screentip="Lookup recipient certificates"
                   supertip="Search LDAP directories for recipient encryption certificates."
                   size="normal"
-                  imageMso="ContactPictureMenu"
+                  image="btnLookup"
                   onAction="OnLookupClick" />
         </group>
         <group id="grpSettings" label="Settings">
@@ -56,7 +57,7 @@
                         screentip="Toggle Parcl Dashboard"
                         supertip="Show or hide the animated Parcl security dashboard panel."
                         size="large"
-                        imageMso="ViewSideBySide"
+                        image="btnDashboard"
                         onAction="OnDashboardToggle"
                         getPressed="GetDashboardPressed" />
           <button id="btnOptions"
@@ -64,7 +65,7 @@
                   screentip="Parcl Options"
                   supertip="Configure LDAP directories, crypto preferences, and add-in behavior."
                   size="large"
-                  imageMso="ToolsOptions"
+                  image="btnOptions"
                   onAction="OnOptionsClick" />
         </group>
       </tab>

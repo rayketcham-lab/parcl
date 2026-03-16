@@ -113,8 +113,8 @@
                             </EventTrigger>
                         </Border.Triggers>
                         <StackPanel>
-                            <TextBlock Text="SECURITY STATUS"
-                                       FontSize="10" FontWeight="Bold" LetterSpacing="1"
+                            <TextBlock Text="S E C U R I T Y   S T A T U S"
+                                       FontSize="10" FontWeight="Bold"
                                        Foreground="{StaticResource ParclTextDimBrush}"
                                        Margin="0,0,0,8" />
 

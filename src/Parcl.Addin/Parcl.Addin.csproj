@@ -12,17 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Microsoft.Office.Interop.Outlook">
-      <HintPath>..\..\lib\Microsoft.Office.Interop.Outlook.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
     <Reference Include="office">
       <HintPath>..\..\lib\office.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Microsoft.Office.Tools.Common" />
-    <Reference Include="Microsoft.Office.Tools.Outlook" />
-    <Reference Include="Microsoft.VisualStudio.Tools.Applications.Runtime" />
     <Reference Include="System.DirectoryServices" />
     <Reference Include="System.Security" />
     <Reference Include="System.Windows.Forms" />
@@ -40,11 +34,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="ParclRibbon.xml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Include="TaskPane\**\*.xaml" />
-    <Page Include="Animations\**\*.xaml" />
   </ItemGroup>
 
 </Project>
