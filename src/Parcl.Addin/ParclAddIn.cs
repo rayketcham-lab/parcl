@@ -162,15 +162,14 @@ namespace Parcl.Addin
             bool shouldEncryptRequested = false;
             try
             {
-                // ── Signing (deferred from compose toggle or auto-sign) ──
+                // ── Determine what's requested ──
                 bool shouldSign = false;
+                bool shouldEncrypt = false;
 
-                // Check if user toggled Sign on this message
                 var signFlag = mail.UserProperties.Find("ParclSign");
                 if (signFlag != null && (bool)signFlag.Value)
                     shouldSign = true;
 
-                // Check auto-sign setting
                 if (Settings.Crypto.AlwaysSign &&
                     !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
                 {
@@ -178,45 +177,31 @@ namespace Parcl.Addin
                         Settings.UserProfile.SigningCertThumbprint!);
                     if (signingCert != null && signingCert.HasPrivateKey)
                         shouldSign = true;
-                    else
-                        Logger.Warn("Send",
-                            "Signing certificate not found or has no private key — skipping");
                 }
 
-                if (shouldSign)
-                {
-                    const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
-                    const int SECFLAG_SIGNED = 0x02;
-
-                    var pa = mail.PropertyAccessor;
-                    int flags;
-                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
-                    catch { flags = 0; }
-
-                    pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
-                    Logger.Info("Send", "S/MIME signature flag applied at send time");
-                }
-
-                // ── Encryption (Parcl encapsulation at send time) ──
-                bool shouldEncrypt = false;
-
-                // Check if user toggled Encrypt on this message
                 var encryptFlag = mail.UserProperties.Find("ParclEncrypt");
                 if (encryptFlag != null && (bool)encryptFlag.Value)
                     shouldEncrypt = true;
 
-                // Check auto-encrypt setting
                 if (Settings.Crypto.AlwaysEncrypt)
                     shouldEncrypt = true;
 
                 shouldEncryptRequested = shouldEncrypt;
+
+                // ── Apply ──
+                // If encrypting: do it ourselves (sign goes INSIDE the encrypted envelope per RFC 5751).
+                // If only signing: use Outlook's native PR_SECURITY_FLAGS.
+                // Never set PR_SECURITY_FLAGS for sign when also encrypting — that double-wraps
+                // and the recipient sees "Signed" as the outer layer instead of "Encrypted".
+
                 if (shouldEncrypt)
                 {
-                    Logger.Info("Send", "Encapsulating message in S/MIME envelope");
-                    string? encryptError = EncapsulateMessage(mail);
+                    Logger.Info("Send", "Encapsulating message in S/MIME envelope"
+                        + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
+
+                    string? encryptError = EncapsulateMessage(mail, shouldSign);
                     if (encryptError != null)
                     {
-                        // Encryption was requested — if it fails, BLOCK the send. No exceptions.
                         cancel = true;
                         Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
                         MessageBox.Show(
@@ -227,6 +212,20 @@ namespace Parcl.Addin
                             MessageBoxIcon.Error);
                         return;
                     }
+                }
+                else if (shouldSign)
+                {
+                    // Sign-only: use Outlook's native signing
+                    const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                    const int SECFLAG_SIGNED = 0x02;
+
+                    var pa = mail.PropertyAccessor;
+                    int flags;
+                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                    catch { flags = 0; }
+
+                    pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
+                    Logger.Info("Send", "S/MIME signature flag applied (sign-only, no encrypt)");
                 }
             }
             catch (Exception ex)
@@ -252,10 +251,11 @@ namespace Parcl.Addin
 
         /// <summary>
         /// Performs the actual S/MIME encapsulation at send time.
+        /// If alsoSign is true, signs the MIME content BEFORE encrypting (RFC 5751 sign-then-encrypt).
         /// Returns null on success, or an error message string if encryption failed.
         /// If this returns non-null, the send MUST be cancelled.
         /// </summary>
-        private string? EncapsulateMessage(Outlook.MailItem mail)
+        private string? EncapsulateMessage(Outlook.MailItem mail, bool alsoSign = false)
         {
             // ── Validate ALL recipients have valid certs ──
             var recipientCerts =
@@ -338,11 +338,39 @@ namespace Parcl.Addin
             Logger.Debug("Send",
                 $"MIME content built: {mimeContent.Length} bytes, {attachments.Count} attachment(s)");
 
-            // ── Encrypt (bypassing chain validation — use certs as-is) ──
+            // ── Sign INSIDE the envelope if requested (sign-then-encrypt per RFC 5751) ──
+            byte[] contentToEncrypt = mimeContent;
+            if (alsoSign && !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
+            {
+                var signingCert = CertStore.FindByThumbprint(
+                    Settings.UserProfile.SigningCertThumbprint!);
+                if (signingCert != null && signingCert.HasPrivateKey)
+                {
+                    var signedCms = new System.Security.Cryptography.Pkcs.SignedCms(
+                        new System.Security.Cryptography.Pkcs.ContentInfo(mimeContent), detached: false);
+                    var signer = new System.Security.Cryptography.Pkcs.CmsSigner(
+                        System.Security.Cryptography.Pkcs.SubjectIdentifierType.IssuerAndSerialNumber,
+                        signingCert)
+                    {
+                        DigestAlgorithm = new System.Security.Cryptography.Oid("2.16.840.1.101.3.4.2.1"),
+                        IncludeOption = System.Security.Cryptography.X509Certificates.X509IncludeOption.WholeChain
+                    };
+                    signedCms.ComputeSignature(signer);
+                    contentToEncrypt = signedCms.Encode();
+                    Logger.Info("Send",
+                        $"MIME content signed inside envelope ({contentToEncrypt.Length} bytes)");
+                }
+                else
+                {
+                    Logger.Warn("Send", "Signing cert not found or has no private key — encrypting without signature");
+                }
+            }
+
+            // ── Encrypt ──
             // Chain validation was too strict for self-signed/internal certs.
             // We already validated expiry above. The CMS encrypt will fail if
             // the cert is truly unusable.
-            var contentInfo = new System.Security.Cryptography.Pkcs.ContentInfo(mimeContent);
+            var contentInfo = new System.Security.Cryptography.Pkcs.ContentInfo(contentToEncrypt);
             var envelopedCms = new System.Security.Cryptography.Pkcs.EnvelopedCms(
                 contentInfo,
                 new System.Security.Cryptography.Pkcs.AlgorithmIdentifier(
