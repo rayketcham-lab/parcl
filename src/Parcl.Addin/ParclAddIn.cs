@@ -45,6 +45,12 @@ namespace Parcl.Addin
             try
             {
                 Settings = ParclSettings.Load();
+
+                // Apply log level from settings
+                if (Enum.TryParse<Parcl.Core.Config.LogLevel>(
+                        Settings.Behavior.LogLevel, true, out var configuredLevel))
+                    Logger.SetMinLevel(configuredLevel);
+
                 Logger.Debug("AddIn",
                     $"Settings loaded — {Settings.LdapDirectories.Count} LDAP directories configured");
 
@@ -94,6 +100,9 @@ namespace Parcl.Addin
                 // Also catch new inspectors (opened messages)
                 _application.Inspectors.NewInspector += Inspectors_NewInspector;
 
+                // Hook new mail for inbox icon classification
+                _application.NewMailEx += Application_NewMailEx;
+
                 Logger.Debug("AddIn", "Ribbon selection tracking enabled");
 
                 Logger.Info("AddIn", "Parcl add-in started successfully");
@@ -129,6 +138,88 @@ namespace Parcl.Addin
         {
             // Hide/show Parcl tab when switching between Mail/Calendar/People
             try { _ribbon?.Invalidate(); }
+            catch { }
+        }
+
+        // ── Inbox icon classification ─────────────────────────────────────
+        // PR_ICON_INDEX values: Outlook built-in S/MIME icons
+        private const string PR_ICON_INDEX = "http://schemas.microsoft.com/mapi/proptag/0x10800003";
+        private const int ICON_ENCRYPTED = 1604;     // padlock
+        private const int ICON_SIGNED = 1603;         // ribbon/seal
+        private const int ICON_SIGNED_ENCRYPTED = 1605; // padlock + ribbon
+
+        private void Application_NewMailEx(string entryIDCollection)
+        {
+            try
+            {
+                foreach (var entryID in entryIDCollection.Split(','))
+                {
+                    var id = entryID.Trim();
+                    if (string.IsNullOrEmpty(id)) continue;
+
+                    var item = _application!.Session.GetItemFromID(id);
+                    if (item is Outlook.MailItem mail)
+                    {
+                        ClassifyAndSetIcon(mail);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Icons", $"NewMailEx icon classification failed: {ex.Message}");
+            }
+        }
+
+        private void ClassifyAndSetIcon(Outlook.MailItem mail)
+        {
+            try
+            {
+                bool isEncrypted = false;
+                bool isSigned = false;
+
+                // Check for .p7m attachment (Parcl-encrypted)
+                for (int i = 1; i <= mail.Attachments.Count; i++)
+                {
+                    if (mail.Attachments[i].FileName.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isEncrypted = true;
+                        break;
+                    }
+                }
+
+                // Check PR_SECURITY_FLAGS (native S/MIME)
+                try
+                {
+                    var flags = (int)mail.PropertyAccessor.GetProperty(
+                        "http://schemas.microsoft.com/mapi/proptag/0x6E010003");
+                    if ((flags & 0x01) != 0) isEncrypted = true;
+                    if ((flags & 0x02) != 0) isSigned = true;
+                }
+                catch { }
+
+                // Check message class
+                try
+                {
+                    if (mail.MessageClass == "IPM.Note.SMIME")
+                        isEncrypted = true;
+                    if (mail.MessageClass == "IPM.Note.SMIME.MultipartSigned")
+                        isSigned = true;
+                }
+                catch { }
+
+                if (!isEncrypted && !isSigned) return;
+
+                int iconIndex = isEncrypted && isSigned ? ICON_SIGNED_ENCRYPTED
+                              : isEncrypted ? ICON_ENCRYPTED
+                              : ICON_SIGNED;
+
+                mail.PropertyAccessor.SetProperty(PR_ICON_INDEX, iconIndex);
+                mail.Save();
+
+                Logger?.Debug("Icons",
+                    $"Icon set: {(isEncrypted ? "encrypted" : "")}" +
+                    $"{(isSigned ? " signed" : "")} -> icon {iconIndex} for: {mail.Subject}");
+            }
             catch { }
         }
 

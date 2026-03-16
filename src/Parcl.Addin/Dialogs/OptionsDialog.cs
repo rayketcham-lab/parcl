@@ -33,6 +33,7 @@ namespace Parcl.Addin.Dialogs
 
         // Behavior controls
         private CheckBox _autoDecrypt = null!;
+        private ComboBox _logLevel = null!;
         private ComboBox _autoLookup = null!;
         private CheckBox _promptMissing = null!;
         private CheckBox _showStatus = null!;
@@ -225,8 +226,8 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 5,
-                Height = 180,
+                RowCount = 7,
+                Height = 250,
                 Padding = new Padding(12)
             };
 
@@ -237,6 +238,18 @@ namespace Parcl.Addin.Dialogs
             _promptMissing = new CheckBox { Text = "Prompt when recipient certificate not found" };
             _showStatus = new CheckBox { Text = "Show status bar in Outlook" };
 
+            _logLevel = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            _logLevel.Items.AddRange(new object[] { "Debug", "Info", "Warn", "Error" });
+
+            var openLogsBtn = new Button { Text = "Open Log Folder", AutoSize = true };
+            openLogsBtn.Click += (s, e) =>
+            {
+                var logDir = ParclAddIn.Current?.Logger?.GetLogDirectory()
+                    ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Parcl", "logs");
+                try { System.Diagnostics.Process.Start("explorer.exe", logDir); }
+                catch { }
+            };
+
             panel.Controls.Add(_autoDecrypt, 0, 0);
             panel.SetColumnSpan(_autoDecrypt, 2);
             AddRow(panel, 1, "Certificate lookup:", _autoLookup);
@@ -244,6 +257,8 @@ namespace Parcl.Addin.Dialogs
             panel.SetColumnSpan(_promptMissing, 2);
             panel.Controls.Add(_showStatus, 0, 3);
             panel.SetColumnSpan(_showStatus, 2);
+            AddRow(panel, 4, "Log level:", _logLevel);
+            panel.Controls.Add(openLogsBtn, 1, 5);
 
             tab.Controls.Add(panel);
             return tab;
@@ -304,6 +319,8 @@ namespace Parcl.Addin.Dialogs
 
             // Load behavior
             _autoDecrypt.Checked = _settings.Behavior.AutoDecrypt;
+            _logLevel.SelectedItem = _settings.Behavior.LogLevel;
+            if (_logLevel.SelectedIndex < 0) _logLevel.SelectedIndex = 1; // default Info
             _autoLookup.SelectedIndex = (int)_settings.Behavior.AutoLookup;
             _promptMissing.Checked = _settings.Behavior.PromptOnMissingCert;
             _showStatus.Checked = _settings.Behavior.ShowStatusBar;
@@ -324,6 +341,7 @@ namespace Parcl.Addin.Dialogs
             _settings.Crypto.AlwaysEncrypt = _alwaysEncrypt.Checked;
 
             _settings.Behavior.AutoDecrypt = _autoDecrypt.Checked;
+            _settings.Behavior.LogLevel = _logLevel.SelectedItem?.ToString() ?? "Info";
             _settings.Behavior.AutoLookup = (LookupTrigger)_autoLookup.SelectedIndex;
             _settings.Behavior.PromptOnMissingCert = _promptMissing.Checked;
             _settings.Behavior.ShowStatusBar = _showStatus.Checked;
@@ -333,6 +351,15 @@ namespace Parcl.Addin.Dialogs
             _settings.Cache.MaxCacheEntries = (int)_maxCache.Value;
 
             _settings.Save();
+
+            // Apply log level change immediately
+            if (ParclAddIn.Current?.Logger != null &&
+                Enum.TryParse<Parcl.Core.Config.LogLevel>(
+                    _settings.Behavior.LogLevel, true, out var newLevel))
+            {
+                ParclAddIn.Current.Logger.SetMinLevel(newLevel);
+            }
+
             DialogResult = DialogResult.OK;
             Close();
         }

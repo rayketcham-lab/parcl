@@ -31,7 +31,7 @@ namespace Parcl.Core.Config
         private readonly string _logDir;
         private readonly string _sessionId;
         private readonly int _pid;
-        private readonly LogLevel _minLevel;
+        private LogLevel _minLevel;
         private readonly StreamWriter _writer;
         private readonly string _logFile;
         private readonly object _lock = new object();
@@ -132,6 +132,14 @@ namespace Parcl.Core.Config
         }
 
         public string GetLogFilePath() => _logFile;
+        public string GetLogDirectory() => _logDir;
+
+        public void SetMinLevel(LogLevel level)
+        {
+            var old = _minLevel;
+            _minLevel = level;
+            Info("Logger", $"Log level changed: {old} -> {level}");
+        }
 
         public void Dispose()
         {

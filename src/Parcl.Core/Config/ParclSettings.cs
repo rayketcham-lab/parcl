@@ -88,6 +88,7 @@ namespace Parcl.Core.Config
     public class BehaviorSettings
     {
         public bool AutoDecrypt { get; set; }
+        public string LogLevel { get; set; } = "Info";
         public LookupTrigger AutoLookup { get; set; } = LookupTrigger.OnCompose;
         public bool PromptOnMissingCert { get; set; } = true;
         public bool ShowStatusBar { get; set; } = true;
