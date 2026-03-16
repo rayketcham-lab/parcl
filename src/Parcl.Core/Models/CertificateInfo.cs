@@ -71,6 +71,6 @@ namespace Parcl.Core.Models
         }
 
         public override string ToString() =>
-            $"{Subject} [{Thumbprint[..8]}...] Expires: {NotAfter:yyyy-MM-dd}";
+            $"{Subject} [{Thumbprint.Substring(0, 8)}...] Expires: {NotAfter:yyyy-MM-dd}";
     }
 }
