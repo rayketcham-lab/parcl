@@ -44,9 +44,14 @@ namespace Parcl.Addin.Dialogs
                 Location = new Point(26, 58)
             };
 
+            bool fipsEnabled = false;
+            try { fipsEnabled = System.Security.Cryptography.CryptoConfig.AllowOnlyFipsAlgorithms; }
+            catch { }
+
             var versionLabel = new Label
             {
-                Text = $"Version {version?.Major ?? 1}.{version?.Minor ?? 2}.{version?.Build ?? 0}",
+                Text = $"Version {version?.Major ?? 1}.{version?.Minor ?? 2}.{version?.Build ?? 0}" +
+                       (fipsEnabled ? "  |  FIPS Mode" : ""),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.FromArgb(130, 130, 140),
                 AutoSize = true,
