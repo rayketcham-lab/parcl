@@ -32,15 +32,18 @@ namespace Parcl.Core.Config
             {
                 Trace.TraceWarning($"[Parcl.Settings] {failureReason}");
 
-                // If the HMAC key exists but verification failed, settings may be tampered.
-                // Reset to safe defaults and rewrite the HMAC.
-                if (File.Exists(Path.Combine(SettingsDir, "settings.key")) &&
-                    File.Exists(Path.Combine(SettingsDir, "settings.json.hmac")))
+                // HMAC mismatch: settings were modified externally (Options dialog,
+                // PowerShell, etc.) or this is a first-run/migration case.
+                // Load the settings and re-seal the HMAC so they're trusted next time.
+                // This avoids resetting user preferences on every external modification.
+                var settings = JsonConvert.DeserializeObject<ParclSettings>(json);
+                if (settings != null)
                 {
-                    Trace.TraceWarning("[Parcl.Settings] Tampered settings detected — resetting to defaults");
-                    return CreateDefault();
+                    settings.Save(); // Re-seals HMAC for the current content
+                    Trace.TraceInformation("[Parcl.Settings] HMAC re-sealed after external modification");
+                    return settings;
                 }
-                // Otherwise this is first-run or pre-integrity migration — load normally
+                return CreateDefault();
             }
 
             return JsonConvert.DeserializeObject<ParclSettings>(json) ?? CreateDefault();
