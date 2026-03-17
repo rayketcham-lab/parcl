@@ -142,6 +142,23 @@ namespace Parcl.Addin
             // Ribbon toggle states (Encrypt/Sign) must reflect the SELECTED message
             try { _ribbon?.Invalidate(); }
             catch (Exception ex) { Logger?.Debug("Ribbon", $"Invalidate failed on SelectionChange: {ex.Message}"); }
+
+            // Classify selected message icon if not already set
+            try
+            {
+                var explorer = _application?.ActiveExplorer();
+                if (explorer?.Selection?.Count > 0 && explorer.Selection[1] is Outlook.MailItem mail)
+                {
+                    int currentIcon = -1;
+                    try { currentIcon = (int)mail.PropertyAccessor.GetProperty(PR_ICON_INDEX); }
+                    catch { }
+
+                    // Only classify if icon not yet set (icon == -1 or default 256/272)
+                    if (currentIcon == -1 || currentIcon == 256 || currentIcon == 272)
+                        ClassifyAndSetIcon(mail);
+                }
+            }
+            catch { }
         }
 
         private void Explorer_FolderSwitch()
