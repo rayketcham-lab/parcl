@@ -18,7 +18,7 @@ namespace Parcl.Addin.Dialogs
             var version = Assembly.GetExecutingAssembly().GetName().Version;
 
             Text = "About Parcl";
-            Size = new Size(460, 460);
+            Size = new Size(460, 490);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -32,7 +32,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 22, FontStyle.Bold),
                 ForeColor = Color.FromArgb(79, 195, 247),
                 AutoSize = true,
-                Location = new Point(24, 14)
+                Location = new Point(24, 10)
             };
 
             var subtitleLabel = new Label
@@ -135,7 +135,7 @@ namespace Parcl.Addin.Dialogs
             // License
             var licenseLabel = new Label
             {
-                Text = "Licensed under the MIT License",
+                Text = "Licensed under the Apache License 2.0",
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.FromArgb(100, 100, 110),
                 AutoSize = true,

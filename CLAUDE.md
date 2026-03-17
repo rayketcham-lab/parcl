@@ -2,7 +2,7 @@
 
 Outlook VSTO COM Add-in for S/MIME certificate management, encryption, signing, and LDAP lookup.
 
-**Language:** C# / .NET Framework 4.8 | **Binary:** Parcl.Addin | **License:** MIT
+**Language:** C# / .NET Framework 4.8 | **Binary:** Parcl.Addin | **License:** Apache 2.0
 
 ---
 

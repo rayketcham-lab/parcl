@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/rayketcham-lab/parcl/actions/workflows/ci.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/ci.yml)
 [![Security](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 Parcl is a Microsoft Outlook COM add-in that provides end-to-end S/MIME email security — encryption, digital signatures, and certificate management — directly from the Outlook ribbon. Pure COM add-in — no VSTO runtime required. It handles the entire certificate lifecycle: discovery via LDAP and Outlook contacts, import from received emails, and application of RFC 5751 S/MIME cryptographic operations.
 
@@ -217,7 +217,7 @@ Get-Content "$env:APPDATA\Parcl\logs\parcl-*.jsonl" | ConvertFrom-Json | Where-O
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)
 
 ## Credits
 
