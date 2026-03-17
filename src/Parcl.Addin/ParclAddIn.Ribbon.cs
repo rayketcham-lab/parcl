@@ -289,14 +289,34 @@ namespace Parcl.Addin
 
                 if (smimeAttachment == null)
                 {
-                    Logger.Info("Decrypt",
-                        "No .p7m attachment found — message may already be decrypted by Outlook");
-                    MessageBox.Show(
-                        "No encrypted content found.\n\n" +
-                        "Outlook automatically decrypts properly formatted S/MIME messages.\n" +
-                        "This button decrypts Parcl at-rest encrypted messages and .p7m attachments.",
-                        "Parcl — Decrypt",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // Check if Outlook already decrypted this message natively
+                    bool wasEncrypted = false;
+                    try
+                    {
+                        var secFlags = (int)mail.PropertyAccessor.GetProperty(PR_SECURITY_FLAGS);
+                        wasEncrypted = (secFlags & SECFLAG_ENCRYPTED) != 0;
+                    }
+                    catch { }
+
+                    if (wasEncrypted && mail.Body?.Length > 0)
+                    {
+                        Logger.Info("Decrypt", "Message already decrypted by Outlook natively");
+                        MessageBox.Show(
+                            "This message is already decrypted.\n\n" +
+                            "Outlook decrypted it automatically using your certificate.\n" +
+                            "The message content is visible in the reading pane.",
+                            "Parcl — Already Decrypted",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        Logger.Info("Decrypt", "No encrypted content found");
+                        MessageBox.Show(
+                            "This message is not encrypted.\n\n" +
+                            "Use the Encrypt button when composing to encrypt outgoing messages.",
+                            "Parcl — Not Encrypted",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                     return;
                 }
 
