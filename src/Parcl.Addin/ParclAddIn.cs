@@ -449,21 +449,47 @@ namespace Parcl.Addin
                     if (Settings.Crypto.UseNativeSmime)
                     {
                         // ── Native S/MIME via PR_SECURITY_FLAGS ──
-                        // Outlook handles CMS encryption internally and formats the MIME
-                        // correctly for reading pane inline display. Publish certs to
-                        // AddressEntry so Outlook can find them for recipients with
-                        // RDN/email mismatches.
-                        Logger.Info("Send", "Using native Outlook S/MIME"
+                        // Check if all recipients have certs that Outlook can natively find.
+                        // If any recipient has a cert mismatch (email != SMTP), Outlook will
+                        // show the "Encryption Problems" dialog. In that case, fall back to
+                        // Parcl envelope mode which handles cert mismatches gracefully.
+                        Logger.Info("Send", "Checking native S/MIME compatibility"
                             + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
 
-                        // Publish certs to recipients so Outlook finds them
+                        bool allNativeCompatible = true;
                         for (int i = 1; i <= mail.Recipients.Count; i++)
                         {
                             var recipient = mail.Recipients[i];
                             var smtpAddr = ResolveSmtpAddress(recipient);
                             var cert = ResolveRecipientCert(smtpAddr, recipient);
-                            if (cert != null && cert.NotAfter > DateTime.UtcNow)
+
+                            if (cert == null || cert.NotAfter <= DateTime.UtcNow)
                             {
+                                Logger.Warn("Send", $"No valid cert for {ParclLogger.SanitizeEmail(smtpAddr)}");
+                                allNativeCompatible = false;
+                                continue;
+                            }
+
+                            // Check if the cert email matches the SMTP address
+                            // If it doesn't, Outlook's native engine won't find it
+                            bool certMatchesSmtp = false;
+                            var certEmail = Parcl.Core.Models.CertificateInfo.FromX509(cert).Email;
+                            if (!string.IsNullOrEmpty(certEmail) &&
+                                certEmail.Equals(smtpAddr, StringComparison.OrdinalIgnoreCase))
+                            {
+                                certMatchesSmtp = true;
+                            }
+
+                            // Also check if Subject contains the email
+                            if (!certMatchesSmtp && cert.Subject != null &&
+                                cert.Subject.ToLowerInvariant().Contains(smtpAddr.ToLowerInvariant()))
+                            {
+                                certMatchesSmtp = true;
+                            }
+
+                            if (certMatchesSmtp)
+                            {
+                                // Publish cert to AddressEntry for good measure
                                 try
                                 {
                                     var addrEntry = recipient.AddressEntry;
@@ -474,43 +500,67 @@ namespace Parcl.Addin
                                         addrEntry.PropertyAccessor.SetProperty(
                                             PR_USER_X509_CERT,
                                             new object[] { certBytes });
-                                        Logger.Info("Send",
-                                            $"Cert published for {ParclLogger.SanitizeEmail(smtpAddr)}: {cert.Subject}");
                                     }
                                 }
-                                catch (Exception pubEx)
-                                {
-                                    Logger.Debug("Send", $"Cert publish failed for {smtpAddr}: {pubEx.Message}");
-                                }
+                                catch { }
+
+                                Logger.Info("Send",
+                                    $"Native compatible: {ParclLogger.SanitizeEmail(smtpAddr)}");
                             }
                             else
                             {
-                                Logger.Warn("Send", $"No valid cert for {ParclLogger.SanitizeEmail(smtpAddr)}");
+                                Logger.Info("Send",
+                                    $"Cert mismatch for {ParclLogger.SanitizeEmail(smtpAddr)} " +
+                                    $"(cert={ParclLogger.SanitizeEmail(certEmail ?? "none")}) — will use Parcl envelope");
+                                allNativeCompatible = false;
                             }
                         }
 
-                        // Set PR_SECURITY_FLAGS — Outlook encrypts at send time
-                        const string PR_SEC = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
-                        var pa = mail.PropertyAccessor;
-                        int flags;
-                        try { flags = (int)pa.GetProperty(PR_SEC); }
-                        catch { flags = 0; }
+                        if (!allNativeCompatible)
+                        {
+                            // Fall back to Parcl envelope for cert-mismatched recipients
+                            Logger.Info("Send", "Falling back to Parcl envelope (cert mismatch detected)");
+                            string? encryptError = EncapsulateMessage(mail, shouldSign);
+                            if (encryptError != null)
+                            {
+                                cancel = true;
+                                Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
+                                MessageBox.Show(
+                                    $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
+                                    "Fix the issue or remove encryption before sending.",
+                                    "Parcl — Send Blocked",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error);
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            // All recipients native-compatible — use PR_SECURITY_FLAGS
+                            Logger.Info("Send", "All recipients native-compatible — using PR_SECURITY_FLAGS");
 
-                        flags |= 0x01; // SECFLAG_ENCRYPTED
-                        if (shouldSign)
-                            flags |= 0x02; // SECFLAG_SIGNED
+                            const string PR_SEC = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                            var pa = mail.PropertyAccessor;
+                            int flags;
+                            try { flags = (int)pa.GetProperty(PR_SEC); }
+                            catch { flags = 0; }
 
-                        pa.SetProperty(PR_SEC, flags);
+                            flags |= 0x01; // SECFLAG_ENCRYPTED
+                            if (shouldSign)
+                                flags |= 0x02; // SECFLAG_SIGNED
 
-                        // Clear Parcl flags — Outlook handles from here
-                        var encFlag = mail.UserProperties.Find("ParclEncrypt");
-                        if (encFlag != null) encFlag.Value = false;
-                        var sigFlag = mail.UserProperties.Find("ParclSign");
-                        if (sigFlag != null) sigFlag.Value = false;
+                            pa.SetProperty(PR_SEC, flags);
 
-                        Logger.Info("Send",
-                            $"Native S/MIME: flags=0x{flags:X}, " +
-                            $"encrypt=true, sign={shouldSign}");
+                            // Clear Parcl flags — Outlook handles from here
+                            var encFlag = mail.UserProperties.Find("ParclEncrypt");
+                            if (encFlag != null) encFlag.Value = false;
+                            var sigFlag = mail.UserProperties.Find("ParclSign");
+                            if (sigFlag != null) sigFlag.Value = false;
+
+                            Logger.Info("Send",
+                                $"Native S/MIME: flags=0x{flags:X}, " +
+                                $"encrypt=true, sign={shouldSign}");
+                        }
                     }
                     else
                     {
