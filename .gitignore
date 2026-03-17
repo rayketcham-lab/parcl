@@ -75,3 +75,4 @@ secrets.json
 appsettings.Development.json
 .claude/
 tests/certs/*.key
+test-e2e.ps1
