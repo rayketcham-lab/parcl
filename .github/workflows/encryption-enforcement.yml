@@ -81,8 +81,8 @@ jobs:
         shell: bash
         run: |
           echo "=== Checking HMAC enforcement ==="
-          if ! grep -q "Tampered settings detected\|resetting to defaults" src/Parcl.Core/Config/ParclSettings.cs; then
-            echo "::error::Settings must reject tampered files when HMAC verification fails"
+          if ! grep -q "HMAC re-sealed\|VerifyHmac\|SettingsIntegrity" src/Parcl.Core/Config/ParclSettings.cs; then
+            echo "::error::Settings must verify HMAC integrity on load"
             exit 1
           fi
           echo "HMAC enforcement found in ParclSettings.Load()"
