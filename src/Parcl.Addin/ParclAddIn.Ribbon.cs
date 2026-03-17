@@ -856,55 +856,59 @@ namespace Parcl.Addin
         {
             if (flag == SECFLAG_ENCRYPTED)
             {
-                // Remove Parcl encrypt flag
                 var prop = mail.UserProperties.Find("ParclEncrypt");
                 if (prop != null)
                     prop.Value = false;
-
-                // Also clear native S/MIME encrypt flag
-                try
-                {
-                    var pa = mail.PropertyAccessor;
-                    int flags;
-                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
-                    catch { flags = 0; }
-                    if ((flags & SECFLAG_ENCRYPTED) != 0)
-                    {
-                        pa.SetProperty(PR_SECURITY_FLAGS, flags & ~SECFLAG_ENCRYPTED);
-                    }
-                }
-                catch { }
-
-                Logger.Info(component, "Encryption removed from message");
+                Logger.Info(component, "Encryption flag removed");
             }
 
             if (flag == SECFLAG_SIGNED)
             {
-                // Remove Parcl sign flag
                 var prop = mail.UserProperties.Find("ParclSign");
                 if (prop != null)
                     prop.Value = false;
+                Logger.Info(component, "Signing flag removed");
+            }
 
-                // Also clear native S/MIME sign flag
-                try
+            // Clear PR_SECURITY_FLAGS completely — remove the specific bit
+            try
+            {
+                var pa = mail.PropertyAccessor;
+                int flags;
+                try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                catch { flags = 0; }
+
+                // Clear the requested flag. Also clear opaque sign (0x20) when clearing sign.
+                int clearMask = flag;
+                if ((flag & SECFLAG_SIGNED) != 0)
+                    clearMask |= 0x20; // opaque sign flag
+
+                int newFlags = flags & ~clearMask;
+                pa.SetProperty(PR_SECURITY_FLAGS, newFlags);
+                Logger.Debug(component, $"PR_SECURITY_FLAGS: 0x{flags:X} -> 0x{newFlags:X}");
+
+                // If all security flags are now 0, reset message class to IPM.Note
+                if (newFlags == 0)
                 {
-                    var pa = mail.PropertyAccessor;
-                    int flags;
-                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
-                    catch { flags = 0; }
-                    if ((flags & SECFLAG_SIGNED) != 0)
+                    try
                     {
-                        pa.SetProperty(PR_SECURITY_FLAGS, flags & ~SECFLAG_SIGNED);
+                        if (mail.MessageClass != "IPM.Note")
+                        {
+                            mail.MessageClass = "IPM.Note";
+                            Logger.Debug(component, "MessageClass reset to IPM.Note");
+                        }
                     }
+                    catch { }
                 }
-                catch { }
-
-                Logger.Info(component, "Signing removed from message");
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug(component, $"Failed to clear PR_SECURITY_FLAGS: {ex.Message}");
             }
 
             mail.Save();
             _ribbon?.Invalidate();
-            Logger.Debug(component, $"Flag 0x{flag:X2} cleared — ribbon invalidated");
+            Logger.Info(component, $"Security flag 0x{flag:X2} cleared, message saved");
         }
 
         // ── Cert resolution: Outlook contacts → GAL/Exchange → AddressEntry → cert stores ──
