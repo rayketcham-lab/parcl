@@ -42,6 +42,14 @@ namespace Parcl.Addin
             Logger = new ParclLogger();
             Logger.Info("AddIn", "Parcl add-in connecting");
 
+            // FIPS 140-2 compliance check
+            try
+            {
+                var fipsEnabled = System.Security.Cryptography.CryptoConfig.AllowOnlyFipsAlgorithms;
+                Logger.Info("AddIn", $"FIPS mode: {(fipsEnabled ? "ENABLED" : "disabled")}");
+            }
+            catch { }
+
             try
             {
                 Settings = ParclSettings.Load();
