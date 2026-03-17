@@ -422,61 +422,69 @@ namespace Parcl.Addin
                 {
                     if (Settings.Crypto.UseNativeSmime)
                     {
-                        // ── Native S/MIME via Extended MAPI ──
-                        // Build CMS envelope, then write directly into MAPI body via P/Invoke.
-                        // Same approach as ECAO: hidden attachment + IPM.Note.SMIME.
-                        Logger.Info("Send", "Using Extended MAPI S/MIME"
+                        // ── Native S/MIME via PR_SECURITY_FLAGS ──
+                        // Outlook handles CMS encryption internally and formats the MIME
+                        // correctly for reading pane inline display. Publish certs to
+                        // AddressEntry so Outlook can find them for recipients with
+                        // RDN/email mismatches.
+                        Logger.Info("Send", "Using native Outlook S/MIME"
                             + (shouldSign ? " (sign + encrypt)" : " (encrypt only)"));
 
-                        // Build CMS without modifying the mail item
-                        var cmsBytes = BuildCmsEnvelope(mail, shouldSign, out var encryptError);
-                        if (encryptError != null)
+                        // Publish certs to recipients so Outlook finds them
+                        for (int i = 1; i <= mail.Recipients.Count; i++)
                         {
-                            cancel = true;
-                            Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
-                            MessageBox.Show(
-                                $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
-                                "Fix the issue or remove encryption before sending.",
-                                "Parcl — Send Blocked",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Error);
-                            return;
-                        }
-
-                        if (cmsBytes != null && cmsBytes.Length > 0)
-                        {
-                            Logger.Info("Send", $"CMS envelope built: {cmsBytes.Length} bytes");
-
-                            // Write CMS directly into MAPI body as hidden attachment
-                            try
+                            var recipient = mail.Recipients[i];
+                            var smtpAddr = ResolveSmtpAddress(recipient);
+                            var cert = ResolveRecipientCert(smtpAddr, recipient);
+                            if (cert != null && cert.NotAfter > DateTime.UtcNow)
                             {
-                                bool mapiOk = Parcl.Core.Interop.ExtendedMapi.SetSmimeContent(
-                                    mail.MAPIOBJECT, cmsBytes, Logger);
-
-                                if (mapiOk)
+                                try
                                 {
-                                    Logger.Info("Send",
-                                        $"Extended MAPI: S/MIME set as hidden attachment ({cmsBytes.Length} bytes)");
+                                    var addrEntry = recipient.AddressEntry;
+                                    if (addrEntry != null)
+                                    {
+                                        var certBytes = cert.Export(
+                                            System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
+                                        addrEntry.PropertyAccessor.SetProperty(
+                                            PR_USER_X509_CERT,
+                                            new object[] { certBytes });
+                                        Logger.Info("Send",
+                                            $"Cert published for {smtpAddr}: {cert.Subject}");
+                                    }
                                 }
-                                else
+                                catch (Exception pubEx)
                                 {
-                                    // MAPI failed — fall back to Parcl envelope (OOM attachment)
-                                    Logger.Warn("Send", "Extended MAPI failed — using Parcl envelope fallback");
-                                    EncapsulateMessage(mail, shouldSign);
+                                    Logger.Debug("Send", $"Cert publish failed for {smtpAddr}: {pubEx.Message}");
                                 }
                             }
-                            catch (Exception mapiEx)
+                            else
                             {
-                                Logger.Error("Send", $"Extended MAPI error: {mapiEx.Message}", mapiEx);
-                                // Fallback to Parcl envelope
-                                EncapsulateMessage(mail, shouldSign);
+                                Logger.Warn("Send", $"No valid cert for {smtpAddr}");
                             }
                         }
-                        else
-                        {
-                            Logger.Warn("Send", "CMS build returned no bytes — using Parcl envelope");
-                            EncapsulateMessage(mail, shouldSign);
-                        }
+
+                        // Set PR_SECURITY_FLAGS — Outlook encrypts at send time
+                        const string PR_SEC = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                        var pa = mail.PropertyAccessor;
+                        int flags;
+                        try { flags = (int)pa.GetProperty(PR_SEC); }
+                        catch { flags = 0; }
+
+                        flags |= 0x01; // SECFLAG_ENCRYPTED
+                        if (shouldSign)
+                            flags |= 0x02; // SECFLAG_SIGNED
+
+                        pa.SetProperty(PR_SEC, flags);
+
+                        // Clear Parcl flags — Outlook handles from here
+                        var encFlag = mail.UserProperties.Find("ParclEncrypt");
+                        if (encFlag != null) encFlag.Value = false;
+                        var sigFlag = mail.UserProperties.Find("ParclSign");
+                        if (sigFlag != null) sigFlag.Value = false;
+
+                        Logger.Info("Send",
+                            $"Native S/MIME: flags=0x{flags:X}, " +
+                            $"encrypt=true, sign={shouldSign}");
                     }
                     else
                     {
