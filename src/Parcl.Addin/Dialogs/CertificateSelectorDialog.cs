@@ -113,16 +113,25 @@ namespace Parcl.Addin.Dialogs
 
         private void LoadCertificates()
         {
-            var signingCerts = _certStore.GetSigningCertificates();
+            // Signing: prefer certs with DigitalSignature key usage, fall back to all with private key
+            var signingCerts = _certStore.GetSigningCertificates()
+                .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                .ToList();
+            if (signingCerts.Count == 0)
+                signingCerts = _certStore.GetAllCertificates()
+                    .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                    .ToList();
+
             foreach (var cert in signingCerts)
             {
+                var usage = cert.IsSigningCert ? "Digital Signature" : "General";
                 var item = new ListViewItem(new[]
                 {
                     cert.Subject,
                     cert.Issuer,
                     cert.NotAfter.ToString("yyyy-MM-dd"),
                     cert.Thumbprint.Substring(0, 16) + "...",
-                    "Digital Signature"
+                    usage
                 }) { Tag = cert };
 
                 if (cert.Thumbprint == _settings.UserProfile.SigningCertThumbprint)
@@ -131,16 +140,26 @@ namespace Parcl.Addin.Dialogs
                 _signingListView.Items.Add(item);
             }
 
-            var encryptionCerts = _certStore.GetEncryptionCertificates();
+            // Encryption: prefer certs with KeyEncipherment, fall back to all with private key.
+            // Many valid email certs omit KeyUsage entirely and still work for S/MIME encryption.
+            var encryptionCerts = _certStore.GetEncryptionCertificates()
+                .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                .ToList();
+            if (encryptionCerts.Count == 0)
+                encryptionCerts = _certStore.GetAllCertificates()
+                    .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                    .ToList();
+
             foreach (var cert in encryptionCerts)
             {
+                var usage = cert.IsEncryptionCert ? "Key Encipherment" : "General";
                 var item = new ListViewItem(new[]
                 {
                     cert.Subject,
                     cert.Issuer,
                     cert.NotAfter.ToString("yyyy-MM-dd"),
                     cert.Thumbprint.Substring(0, 16) + "...",
-                    "Key Encipherment"
+                    usage
                 }) { Tag = cert };
 
                 if (cert.Thumbprint == _settings.UserProfile.EncryptionCertThumbprint)

@@ -750,18 +750,98 @@ namespace Parcl.Addin
         /// <summary>
         /// Marks a compose message for encryption. The message stays editable.
         /// Actual encapsulation happens in Application_ItemSend right before the message leaves.
+        /// Auto-detects the user's encryption certificate from the personal store if not configured.
+        /// Falls back to all personal-store certs with private keys if no key-encipherment cert found.
+        /// Opens the cert selector when the cert is unavailable or when multiple candidates exist.
         /// </summary>
         private void EncryptOutgoing(Outlook.MailItem mail)
         {
             Logger.Info("Encrypt",
                 $"Encrypt toggled ON — to: {ParclLogger.SanitizeEmail(mail.To)}, subject: {Truncate(mail.Subject, 30)}");
 
+            // Always read from disk so we pick up thumbprints saved by the selector dialog
+            Settings = Parcl.Core.Config.ParclSettings.Load();
+
+            var thumbprint = Settings.UserProfile.EncryptionCertThumbprint;
+            if (string.IsNullOrEmpty(thumbprint))
+            {
+                Logger.Info("Encrypt", "No encryption cert configured — attempting auto-detect from personal store");
+
+                // Try key-encipherment certs first, then fall back to any cert with a private key.
+                // Many valid email certs omit the KeyUsage extension entirely.
+                var candidates = CertStore.GetEncryptionCertificates()
+                    .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                    .OrderByDescending(c => c.NotAfter)
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    candidates = CertStore.GetAllCertificates()
+                        .Where(c => c.HasPrivateKey && c.NotAfter > DateTime.UtcNow)
+                        .OrderByDescending(c => c.NotAfter)
+                        .ToList();
+                    Logger.Info("Encrypt",
+                        $"Fell back to all personal-store certs with private keys: {candidates.Count} found");
+                }
+
+                if (candidates.Count == 1)
+                {
+                    // Exactly one cert — auto-select silently
+                    Settings.UserProfile.EncryptionCertThumbprint = candidates[0].Thumbprint;
+                    Settings.Save();
+                    Logger.Info("Encrypt",
+                        $"Auto-selected only available cert: {candidates[0].Subject}, thumbprint: {candidates[0].Thumbprint.Substring(0, 8)}");
+                }
+                else
+                {
+                    // Zero or multiple — open the selector so the user can choose
+                    Logger.Info("Encrypt",
+                        candidates.Count == 0
+                            ? "No personal-store certs found — opening selector"
+                            : $"{candidates.Count} candidates — opening selector for user choice");
+                    using (var dlg = new Dialogs.CertificateSelectorDialog())
+                    {
+                        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                        {
+                            Logger.Info("Encrypt", "Cert selection cancelled — encryption not flagged");
+                            return;
+                        }
+                    }
+                    // Reload settings saved by the dialog
+                    Settings = Parcl.Core.Config.ParclSettings.Load();
+                    if (string.IsNullOrEmpty(Settings.UserProfile.EncryptionCertThumbprint))
+                    {
+                        Logger.Warn("Encrypt", "No encryption cert selected in dialog — encryption not flagged");
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                // Thumbprint is set — verify the cert is still in the store and not expired
+                var cert = CertStore.FindByThumbprint(thumbprint!);
+                if (cert == null || cert.NotAfter <= DateTime.UtcNow)
+                {
+                    Logger.Warn("Encrypt",
+                        cert == null ? "Configured encryption cert not found — opening selector" : "Configured encryption cert is expired — opening selector");
+                    using (var dlg = new Dialogs.CertificateSelectorDialog())
+                    {
+                        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                            return;
+                    }
+                    Settings = Parcl.Core.Config.ParclSettings.Load();
+                    if (string.IsNullOrEmpty(Settings.UserProfile.EncryptionCertThumbprint))
+                        return;
+                }
+            }
+
             // Set a user property flag so ItemSend knows to encapsulate
             var flag = mail.UserProperties.Find("ParclEncrypt") ??
                        mail.UserProperties.Add("ParclEncrypt", Outlook.OlUserPropertyType.olYesNo, false);
             flag.Value = true;
 
-            Logger.Info("Encrypt", "Message flagged for S/MIME encryption on send");
+            Logger.Info("Encrypt",
+                $"Message flagged for S/MIME encryption on send (cert: {Settings.UserProfile.EncryptionCertThumbprint!.Substring(0, 8)})");
         }
 
         /// <summary>
