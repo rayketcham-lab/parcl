@@ -819,17 +819,49 @@ namespace Parcl.Addin
         {
             if (flag == SECFLAG_ENCRYPTED)
             {
+                // Remove Parcl encrypt flag
                 var prop = mail.UserProperties.Find("ParclEncrypt");
                 if (prop != null)
                     prop.Value = false;
+
+                // Also clear native S/MIME encrypt flag
+                try
+                {
+                    var pa = mail.PropertyAccessor;
+                    int flags;
+                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                    catch { flags = 0; }
+                    if ((flags & SECFLAG_ENCRYPTED) != 0)
+                    {
+                        pa.SetProperty(PR_SECURITY_FLAGS, flags & ~SECFLAG_ENCRYPTED);
+                    }
+                }
+                catch { }
+
                 Logger.Info(component, "Encryption removed from message");
             }
 
             if (flag == SECFLAG_SIGNED)
             {
+                // Remove Parcl sign flag
                 var prop = mail.UserProperties.Find("ParclSign");
                 if (prop != null)
                     prop.Value = false;
+
+                // Also clear native S/MIME sign flag
+                try
+                {
+                    var pa = mail.PropertyAccessor;
+                    int flags;
+                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                    catch { flags = 0; }
+                    if ((flags & SECFLAG_SIGNED) != 0)
+                    {
+                        pa.SetProperty(PR_SECURITY_FLAGS, flags & ~SECFLAG_SIGNED);
+                    }
+                }
+                catch { }
+
                 Logger.Info(component, "Signing removed from message");
             }
         }
