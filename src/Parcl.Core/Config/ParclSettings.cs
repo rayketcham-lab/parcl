@@ -72,7 +72,7 @@ namespace Parcl.Core.Config
 
         /// <summary>
         /// When true, uses Outlook's native S/MIME engine (PR_SECURITY_FLAGS) for encryption.
-        /// This produces standard S/MIME messages that any client (Entrust, native Outlook, etc.)
+        /// This produces standard S/MIME messages that any RFC 5751 compliant client
         /// can decrypt. When false, uses Parcl's own CMS envelope (smime.p7m attachment) which
         /// supports protected headers (RFC 7508) but requires Parcl on the receiving end.
         /// </summary>

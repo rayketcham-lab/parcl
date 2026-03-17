@@ -185,7 +185,7 @@ namespace Parcl.Addin.Dialogs
             // ── Encryption Mode ──
             _useNativeSmime = new CheckBox
             {
-                Text = "Use native Outlook S/MIME (compatible with Entrust, etc.)",
+                Text = "Use native Outlook S/MIME (standard RFC 5751 compatible)",
                 Location = new Point(8, y),
                 AutoSize = true,
                 Font = new Font("Segoe UI", 9)
@@ -268,7 +268,7 @@ namespace Parcl.Addin.Dialogs
 
             // ── Tooltips ──
             _tips.SetToolTip(_useNativeSmime,
-                "ON (recommended): Outlook handles S/MIME encryption. Works with Entrust, native Outlook, Thunderbird.\n" +
+                "ON (recommended): Outlook handles S/MIME encryption. Works with any RFC 5751 S/MIME client.\n" +
                 "OFF: Parcl builds its own CMS envelope with RFC 7508 protected headers. Requires Parcl on both ends.");
             _tips.SetToolTip(_encAlgo,
                 "AES-256-CBC: FIPS approved, widest compatibility (recommended).\n" +

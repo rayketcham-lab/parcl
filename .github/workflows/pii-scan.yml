@@ -89,10 +89,30 @@ jobs:
           fi
 
           echo ""
-          if [ "$VIOLATIONS" -gt 0 ]; then
-            echo "::warning::Found $VIOLATIONS potential PII item(s). Review above."
-            # Warn but don't block — some may be false positives
-            # Change to 'exit 1' to enforce strictly
+          echo "## Vendor/Company Name-Drop Scan"
+
+          # Block third-party company names, acronyms, and vendor references
+          # Only Quantum Nexum and Parcl are allowed
+          VENDORS=$(grep -rn --include='*.cs' --include='*.md' --include='*.html' \
+            --include='*.xml' --include='*.yml' --include='*.yaml' \
+            -Ei '\b(entrust|raytheon|rtx|symantec|digicert|globalsign|comodo|sectigo|thales|gemalto)\b' . \
+            | grep -vi '\.github/workflows/' \
+            | grep -vi 'CLAUDE\.md' \
+            | grep -vi 'LICENSE' \
+            || true)
+
+          if [ -n "$VENDORS" ]; then
+            echo "::error::Found vendor/company name references in source code!"
+            echo "Do not name-drop third-party companies publicly."
+            echo "$VENDORS" | head -10
+            VIOLATIONS=$((VIOLATIONS + $(echo "$VENDORS" | wc -l)))
           else
-            echo "No PII violations found."
+            echo "No vendor name-drops found."
+          fi
+
+          echo ""
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::warning::Found $VIOLATIONS potential PII/vendor item(s). Review above."
+          else
+            echo "No PII or vendor violations found."
           fi

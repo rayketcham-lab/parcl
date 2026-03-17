@@ -17,9 +17,9 @@ Parcl is a Microsoft Outlook COM add-in that brings end-to-end S/MIME email encr
 ## Why Parcl?
 
 - **Inline decryption** — Encrypted messages render directly in the Outlook reading pane. No separate viewer, no raw `.p7m` files.
-- **Dual-mode encryption** — Native Outlook S/MIME via `PR_SECURITY_FLAGS` (compatible with Entrust, Thunderbird, native Outlook) and Parcl envelope mode with RFC 7508 protected headers for Parcl-to-Parcl communication.
+- **Dual-mode encryption** — Native Outlook S/MIME via `PR_SECURITY_FLAGS` (compatible with any S/MIME client) and Parcl envelope mode with RFC 7508 protected headers for Parcl-to-Parcl communication.
 - **Deferred encryption** — Toggle Encrypt while composing. Edit normally. Encryption happens transparently at send time.
-- **Enterprise-ready** — RDN/CN-to-email matching handles enterprise certificate mismatches (e.g., RTX-style certs where the CN does not match the email address).
+- **Enterprise-ready** — RDN/CN-to-email matching handles enterprise certificate mismatches where the certificate CN does not match the email address.
 - **Zero admin** — Per-user MSI installer. HKCU registry only. No administrator privileges required.
 
 ---
@@ -28,7 +28,7 @@ Parcl is a Microsoft Outlook COM add-in that brings end-to-end S/MIME email encr
 
 ### Encryption & Signing
 - **End-to-end S/MIME encryption** with inline reading pane display
-- **Native Outlook S/MIME** via `PR_SECURITY_FLAGS` — interoperable with Entrust, Thunderbird, and native Outlook S/MIME
+- **Native Outlook S/MIME** via `PR_SECURITY_FLAGS` — interoperable with any RFC 5751 compliant S/MIME client
 - **Parcl envelope mode** with RFC 7508 protected headers (Subject, From, To, Date encrypted inside the envelope)
 - **Digital signatures** — sign-only, sign+encrypt, and opaque signing options
 - **Sign-then-encrypt** layering per RFC 5751 Section 3.7 — signature protected inside the encrypted envelope

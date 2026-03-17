@@ -121,7 +121,7 @@ namespace Parcl.Core.Crypto
             // Check RDN components: extract CN from subject and match against
             // the local part of the email or the display name.
             // Handles enterprise certs where CN="James R Ketcham" but email
-            // is james.r.ketcham@rtx.com (dot-separated name convention).
+            // is user.name@quantumnexum.com (dot-separated name convention).
             if (cert.Subject != null && email.Contains("@"))
             {
                 var localPart = email.Substring(0, email.IndexOf('@')).ToLowerInvariant();

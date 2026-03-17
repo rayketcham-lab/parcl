@@ -170,7 +170,7 @@ namespace Parcl.Core.Config
 
         /// <summary>
         /// Masks the local part of an email address for PII-safe logging.
-        /// "james.r.ketcham@rtx.com" becomes "jam***@rtx.com".
+        /// "user@quantumnexum.com" becomes "us***@quantumnexum.com".
         /// Returns the original string unchanged if it does not contain '@'.
         /// </summary>
         public static string SanitizeEmail(string email)
