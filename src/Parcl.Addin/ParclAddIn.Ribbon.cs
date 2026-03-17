@@ -95,7 +95,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Encrypt", "Encryption toggle failed", ex);
-                MessageBox.Show($"Encryption error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Encryption toggle failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Verify your certificates in Parcl > Select Certificates and try again.",
+                    "Parcl — Encrypt Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -146,7 +149,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Encrypt", "Encryption action failed", ex);
-                MessageBox.Show($"Encryption error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Encryption failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Verify your certificates in Parcl > Select Certificates and try again.",
+                    "Parcl — Encrypt Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -169,7 +175,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Sign", "Signing toggle failed", ex);
-                MessageBox.Show($"Signing error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Signing failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Verify your signing certificate in Parcl > Select Certificates and try again.",
+                    "Parcl — Sign Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -217,7 +226,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Sign", "Signing action failed", ex);
-                MessageBox.Show($"Signing error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Signing failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Verify your signing certificate in Parcl > Select Certificates and try again.",
+                    "Parcl — Sign Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -339,7 +351,11 @@ namespace Parcl.Addin
                 if (!result.Success || result.Content == null)
                 {
                     Logger.Error("Decrypt", $"Decryption failed: {result.ErrorMessage}");
-                    MessageBox.Show($"Decryption failed: {result.ErrorMessage}",
+                    MessageBox.Show(
+                        "Decryption failed — could not unlock this message.\n\n" +
+                        "Why: This message was likely encrypted for a different certificate than the one currently installed on your machine.\n\n" +
+                        "Fix: Go to Parcl > Select Certificates and verify your encryption certificate matches the one the sender used. " +
+                        "If you recently changed certificates, ask the sender to re-encrypt using your current certificate.",
                         "Parcl — Decrypt Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
@@ -473,7 +489,12 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Decrypt", "Decryption action failed", ex);
-                MessageBox.Show($"Decryption error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Decryption failed unexpectedly.\n\n" +
+                    $"Why: {ex.Message}\n\n" +
+                    "Fix: Ensure the message is a valid Parcl-encrypted message and that your encryption certificate is installed. " +
+                    "Go to Parcl > Select Certificates to verify.",
+                    "Parcl — Decrypt Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -534,7 +555,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Exchange", "Certificate exchange failed", ex);
-                MessageBox.Show($"Certificate exchange error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Certificate exchange failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Ensure you have a valid certificate selected in Parcl > Select Certificates and try again.",
+                    "Parcl — Exchange Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -557,7 +581,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("CertSel", "Certificate selector failed", ex);
-                MessageBox.Show($"Certificate selector error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Certificate selector could not open.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Ensure your Windows certificate store is accessible and try again.",
+                    "Parcl — Certificate Selector Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -582,7 +609,9 @@ namespace Parcl.Addin
                 if (directories.Count == 0)
                 {
                     MessageBox.Show(
-                        "No LDAP directories configured. Open Options to add one.",
+                        "No LDAP directories configured.\n\n" +
+                        "Why: LDAP lookup requires at least one directory server to search for recipient certificates.\n\n" +
+                        "Fix: Click Parcl > Options on the ribbon and add an LDAP directory under the Directories tab.",
                         "Parcl — Lookup",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
@@ -640,7 +669,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Lookup", "LDAP lookup failed", ex);
-                MessageBox.Show($"Lookup error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"LDAP certificate lookup failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Check your LDAP directory settings in Parcl > Options and verify the server is reachable.",
+                    "Parcl — Lookup Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -705,7 +737,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Options", "Options dialog failed", ex);
-                MessageBox.Show($"Options error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Options dialog could not open.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Try closing and reopening Outlook. If the issue persists, check %APPDATA%\\Parcl\\ for corrupted settings.",
+                    "Parcl — Options Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -741,8 +776,9 @@ namespace Parcl.Addin
             {
                 Logger.Warn("Sign", "No signing certificate selected");
                 MessageBox.Show(
-                    "No signing certificate selected. " +
-                    "Use the Certificate Selector to choose one.",
+                    "No signing certificate selected.\n\n" +
+                    "Why: You must select a personal certificate with a private key before you can sign messages.\n\n" +
+                    "Fix: Click Parcl > Select Certificates on the ribbon and choose a signing certificate.",
                     "Parcl — Sign",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -754,8 +790,9 @@ namespace Parcl.Addin
                 Logger.Error("Sign",
                     "Signing certificate not found or missing private key");
                 MessageBox.Show(
-                    "The selected signing certificate was not found or " +
-                    "does not have a private key.",
+                    "The selected signing certificate is unavailable.\n\n" +
+                    "Why: The certificate was not found in your Windows certificate store, or it does not have a private key.\n\n" +
+                    "Fix: Go to Parcl > Select Certificates and choose a valid signing certificate that has a private key.",
                     "Parcl — Sign Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -796,8 +833,9 @@ namespace Parcl.Addin
             if (string.IsNullOrEmpty(thumbprint))
             {
                 MessageBox.Show(
-                    "No encryption certificate selected.\n" +
-                    "Use the Certificate Selector to choose one first.",
+                    "No encryption certificate selected.\n\n" +
+                    "Why: An encryption certificate is required to encrypt messages at rest.\n\n" +
+                    "Fix: Click Parcl > Select Certificates on the ribbon and choose your encryption certificate.",
                     "Parcl — Encrypt",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -807,7 +845,9 @@ namespace Parcl.Addin
             if (cert == null)
             {
                 MessageBox.Show(
-                    "Encryption certificate not found in your certificate store.",
+                    "Encryption certificate not found.\n\n" +
+                    "Why: The previously selected encryption certificate is no longer in your Windows certificate store.\n\n" +
+                    "Fix: Go to Parcl > Select Certificates and choose a valid encryption certificate.",
                     "Parcl — Encrypt Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -1134,7 +1174,10 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("Import", "Certificate import failed", ex);
-                MessageBox.Show($"Import error: {ex.Message}", "Parcl",
+                MessageBox.Show(
+                    $"Certificate import failed.\n\nWhy: {ex.Message}\n\n" +
+                    "Fix: Verify the message contains valid certificate attachments (.cer, .pem, .crt) and try again.",
+                    "Parcl — Import Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

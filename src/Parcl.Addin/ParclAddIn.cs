@@ -526,8 +526,8 @@ namespace Parcl.Addin
                                 cancel = true;
                                 Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
                                 MessageBox.Show(
-                                    $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
-                                    "Fix the issue or remove encryption before sending.",
+                                    $"Message NOT sent — encryption failed.\n\n{encryptError}\n\n" +
+                                    "To send anyway: toggle the Encrypt button off, then click Send again.",
                                     "Parcl — Send Blocked",
                                     MessageBoxButtons.OK,
                                     MessageBoxIcon.Error);
@@ -574,8 +574,8 @@ namespace Parcl.Addin
                             cancel = true;
                             Logger.Error("Send", $"Encryption failed — send blocked: {encryptError}");
                             MessageBox.Show(
-                                $"Message NOT sent — encryption failed:\n\n{encryptError}\n\n" +
-                                "Fix the issue or remove encryption before sending.",
+                                $"Message NOT sent — encryption failed.\n\n{encryptError}\n\n" +
+                                "To send anyway: toggle the Encrypt button off, then click Send again.",
                                 "Parcl — Send Blocked",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -606,8 +606,10 @@ namespace Parcl.Addin
                     cancel = true;
                     Logger.Error("Send", "Encryption failed with exception — send blocked", ex);
                     MessageBox.Show(
-                        $"Message NOT sent — encryption error:\n\n{ex.Message}\n\n" +
-                        "Fix the issue or remove encryption before sending.",
+                        $"Message NOT sent — an unexpected error occurred during encryption.\n\n" +
+                        $"Why: {ex.Message}\n\n" +
+                        "Fix: Check that your certificates are valid in Parcl > Select Certificates.\n" +
+                        "To send without encryption: toggle the Encrypt button off, then click Send again.",
                         "Parcl — Send Blocked",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error);
@@ -669,7 +671,9 @@ namespace Parcl.Addin
 
                 if (cert == null)
                 {
-                    errors.Add($"{smtpAddr}: No certificate found");
+                    errors.Add($"{smtpAddr}: No encryption certificate found.\n" +
+                        "  Why: Parcl could not locate an S/MIME certificate for this recipient.\n" +
+                        "  Fix: Open Parcl > Contacts and import their certificate, or ask them to send it via Certificate Exchange.");
                     Logger.Warn("Send", $"No certificate found for {ParclLogger.SanitizeEmail(smtpAddr)}");
                     continue;
                 }
@@ -677,14 +681,18 @@ namespace Parcl.Addin
                 // Check expiry
                 if (cert.NotAfter <= DateTime.UtcNow)
                 {
-                    errors.Add($"{smtpAddr}: Certificate expired on {cert.NotAfter:yyyy-MM-dd}");
+                    errors.Add($"{smtpAddr}: Certificate expired on {cert.NotAfter:yyyy-MM-dd}.\n" +
+                        "  Why: The recipient's S/MIME certificate is past its validity period.\n" +
+                        "  Fix: Ask the recipient to renew their certificate and send you the updated one via Certificate Exchange.");
                     Logger.Warn("Send", $"Certificate expired for {ParclLogger.SanitizeEmail(smtpAddr)} (expired {cert.NotAfter:yyyy-MM-dd})");
                     continue;
                 }
 
                 if (cert.NotBefore > DateTime.UtcNow)
                 {
-                    errors.Add($"{smtpAddr}: Certificate not yet valid (starts {cert.NotBefore:yyyy-MM-dd})");
+                    errors.Add($"{smtpAddr}: Certificate not yet valid (starts {cert.NotBefore:yyyy-MM-dd}).\n" +
+                        "  Why: The recipient's certificate has a future start date and cannot be used yet.\n" +
+                        "  Fix: Wait until {cert.NotBefore:yyyy-MM-dd}, or ask the recipient for a currently valid certificate.");
                     Logger.Warn("Send", $"Certificate not yet valid for {ParclLogger.SanitizeEmail(smtpAddr)}");
                     continue;
                 }
@@ -701,7 +709,9 @@ namespace Parcl.Addin
             }
 
             if (recipientCerts.Count == 0)
-                return "No recipients with valid certificates";
+                return "No recipients have valid certificates.\n\n" +
+                    "Why: Parcl needs an S/MIME certificate for each recipient to encrypt the message.\n\n" +
+                    "Fix: Open Parcl > Contacts to import certificates, or use Certificate Exchange to request them.";
 
             // Also encrypt to self so Sent Items are readable
             if (!string.IsNullOrEmpty(Settings.UserProfile.EncryptionCertThumbprint))
