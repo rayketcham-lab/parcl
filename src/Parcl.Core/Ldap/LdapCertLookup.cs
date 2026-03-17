@@ -62,26 +62,47 @@ namespace Parcl.Core.Ldap
                 searcher.PropertiesToLoad.Add("cn");
                 searcher.PropertiesToLoad.Add("mail");
 
-                var searchResults = searcher.FindAll();
-                foreach (SearchResult result in searchResults)
+                using (var searchResults = searcher.FindAll())
                 {
-                    if (!result.Properties.Contains(directory.CertAttribute))
-                        continue;
-
-                    foreach (var certBytes in result.Properties[directory.CertAttribute])
+                    foreach (SearchResult result in searchResults)
                     {
-                        if (certBytes is byte[] rawCert)
+                        if (!result.Properties.Contains(directory.CertAttribute))
+                            continue;
+
+                        foreach (var certBytes in result.Properties[directory.CertAttribute])
                         {
-                            try
+                            if (certBytes is byte[] rawCert)
                             {
-                                var cert = new X509Certificate2(rawCert);
-                                var info = CertificateInfo.FromX509(cert);
-                                if (info.IsValid)
-                                    results.Add(info);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger?.Warn("LDAP", $"Skipping malformed certificate from {directory.Server}: {ex.Message}");
+                                try
+                                {
+                                    var cert = new X509Certificate2(rawCert);
+                                    var info = CertificateInfo.FromX509(cert);
+
+                                    // M7: Reject CA certificates (BasicConstraints cA=TRUE)
+                                    // Only end-entity certs should be used for S/MIME
+                                    bool isCaCert = false;
+                                    foreach (var ext in cert.Extensions)
+                                    {
+                                        if (ext is X509BasicConstraintsExtension bc && bc.CertificateAuthority)
+                                        {
+                                            isCaCert = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (isCaCert)
+                                    {
+                                        _logger?.Debug("LDAP", $"Skipping CA certificate: {cert.Subject}");
+                                        continue;
+                                    }
+
+                                    if (info.IsValid)
+                                        results.Add(info);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.Warn("LDAP", $"Skipping malformed certificate from {directory.Server}: {ex.Message}");
+                                }
                             }
                         }
                     }

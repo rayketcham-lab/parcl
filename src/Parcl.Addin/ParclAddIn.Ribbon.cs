@@ -229,7 +229,6 @@ namespace Parcl.Addin
                 Outlook.MailItem? mail = GetMailItem(control);
                 if (mail == null || mail.Sent) return;
                 RemoveFlag(mail, SECFLAG_ENCRYPTED, "Encrypt");
-                _ribbon?.Invalidate();
             }
             catch (Exception ex)
             {
@@ -244,7 +243,6 @@ namespace Parcl.Addin
                 Outlook.MailItem? mail = GetMailItem(control);
                 if (mail == null || mail.Sent) return;
                 RemoveFlag(mail, SECFLAG_SIGNED, "Sign");
-                _ribbon?.Invalidate();
             }
             catch (Exception ex)
             {
@@ -864,6 +862,10 @@ namespace Parcl.Addin
 
                 Logger.Info(component, "Signing removed from message");
             }
+
+            mail.Save();
+            _ribbon?.Invalidate();
+            Logger.Debug(component, $"Flag 0x{flag:X2} cleared — ribbon invalidated");
         }
 
         // ── Cert resolution: Outlook contacts → GAL/Exchange → AddressEntry → cert stores ──

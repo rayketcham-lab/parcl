@@ -77,6 +77,19 @@ namespace Parcl.Core.Config
         /// supports protected headers (RFC 7508) but requires Parcl on the receiving end.
         /// </summary>
         public bool UseNativeSmime { get; set; } = true;
+
+        /// <summary>
+        /// When false (default), produces clear-signed messages where content is readable
+        /// without verifying the signature. When true, produces opaque signatures where
+        /// the content is embedded inside the PKCS#7 signature blob.
+        /// </summary>
+        public bool OpaqueSign { get; set; } = false;
+
+        /// <summary>
+        /// When true (default), includes the full certificate chain in signatures
+        /// so recipients can verify without fetching intermediate certificates.
+        /// </summary>
+        public bool IncludeCertChain { get; set; } = true;
     }
 
     public enum CertValidationMode

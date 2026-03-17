@@ -30,6 +30,8 @@ namespace Parcl.Addin.Dialogs
         private ComboBox _certValidation = null!;
         private CheckBox _alwaysSign = null!;
         private CheckBox _alwaysEncrypt = null!;
+        private CheckBox _opaqueSign = null!;
+        private CheckBox _includeCertChain = null!;
 
         // Behavior controls
         private CheckBox _autoDecrypt = null!;
@@ -172,8 +174,8 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 7,
-                Height = 260,
+                RowCount = 12,
+                Height = 420,
                 Padding = new Padding(12)
             };
 
@@ -191,6 +193,15 @@ namespace Parcl.Addin.Dialogs
                 AutoSize = true
             };
 
+            // Separator between native S/MIME and algorithm dropdowns
+            var cryptoSeparator = new Label
+            {
+                BorderStyle = BorderStyle.Fixed3D,
+                Height = 2,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0, 6, 0, 6)
+            };
+
             _encAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC" });
 
@@ -203,17 +214,45 @@ namespace Parcl.Addin.Dialogs
             _alwaysSign = new CheckBox { Text = "Always sign outgoing messages" };
             _alwaysEncrypt = new CheckBox { Text = "Always encrypt outgoing messages" };
 
+            _opaqueSign = new CheckBox
+            {
+                Text = "Use opaque signing (content inside signature)",
+                AutoSize = true
+            };
+
+            var opaqueHint = new Label
+            {
+                Text = "Clear-signed (default): content readable without verification. Opaque: content embedded in signature blob.",
+                ForeColor = System.Drawing.Color.Gray,
+                Font = new System.Drawing.Font("Segoe UI", 8),
+                AutoSize = true
+            };
+
+            _includeCertChain = new CheckBox
+            {
+                Text = "Include certificate chain in signatures",
+                AutoSize = true
+            };
+
             panel.Controls.Add(_useNativeSmime, 0, 0);
             panel.SetColumnSpan(_useNativeSmime, 2);
             panel.Controls.Add(nativeHint, 0, 1);
             panel.SetColumnSpan(nativeHint, 2);
-            AddRow(panel, 2, "Encryption Algorithm:", _encAlgo);
-            AddRow(panel, 3, "Hash Algorithm:", _hashAlgo);
-            AddRow(panel, 4, "Certificate Validation:", _certValidation);
-            panel.Controls.Add(_alwaysSign, 0, 5);
+            panel.Controls.Add(cryptoSeparator, 0, 2);
+            panel.SetColumnSpan(cryptoSeparator, 2);
+            AddRow(panel, 3, "Encryption Algorithm:", _encAlgo);
+            AddRow(panel, 4, "Hash Algorithm:", _hashAlgo);
+            AddRow(panel, 5, "Certificate Validation:", _certValidation);
+            panel.Controls.Add(_alwaysSign, 0, 6);
             panel.SetColumnSpan(_alwaysSign, 2);
-            panel.Controls.Add(_alwaysEncrypt, 0, 6);
+            panel.Controls.Add(_alwaysEncrypt, 0, 7);
             panel.SetColumnSpan(_alwaysEncrypt, 2);
+            panel.Controls.Add(_opaqueSign, 0, 8);
+            panel.SetColumnSpan(_opaqueSign, 2);
+            panel.Controls.Add(opaqueHint, 0, 9);
+            panel.SetColumnSpan(opaqueHint, 2);
+            panel.Controls.Add(_includeCertChain, 0, 10);
+            panel.SetColumnSpan(_includeCertChain, 2);
 
             tab.Controls.Add(panel);
             return tab;
@@ -226,9 +265,18 @@ namespace Parcl.Addin.Dialogs
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 2,
-                RowCount = 7,
-                Height = 250,
+                RowCount = 9,
+                Height = 300,
                 Padding = new Padding(12)
+            };
+
+            // Encryption section label
+            var encryptionLabel = new Label
+            {
+                Text = "Encryption",
+                Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold),
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 2)
             };
 
             _autoDecrypt = new CheckBox { Text = "Automatically decrypt incoming messages" };
@@ -237,6 +285,15 @@ namespace Parcl.Addin.Dialogs
 
             _promptMissing = new CheckBox { Text = "Prompt when recipient certificate not found" };
             _showStatus = new CheckBox { Text = "Show status bar in Outlook" };
+
+            // Diagnostics section label
+            var diagnosticsLabel = new Label
+            {
+                Text = "Diagnostics",
+                Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold),
+                AutoSize = true,
+                Margin = new Padding(0, 6, 0, 2)
+            };
 
             _logLevel = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _logLevel.Items.AddRange(new object[] { "Debug", "Info", "Warn", "Error" });
@@ -250,15 +307,19 @@ namespace Parcl.Addin.Dialogs
                 catch { }
             };
 
-            panel.Controls.Add(_autoDecrypt, 0, 0);
+            panel.Controls.Add(encryptionLabel, 0, 0);
+            panel.SetColumnSpan(encryptionLabel, 2);
+            panel.Controls.Add(_autoDecrypt, 0, 1);
             panel.SetColumnSpan(_autoDecrypt, 2);
-            AddRow(panel, 1, "Certificate lookup:", _autoLookup);
-            panel.Controls.Add(_promptMissing, 0, 2);
+            AddRow(panel, 2, "Certificate lookup:", _autoLookup);
+            panel.Controls.Add(_promptMissing, 0, 3);
             panel.SetColumnSpan(_promptMissing, 2);
-            panel.Controls.Add(_showStatus, 0, 3);
+            panel.Controls.Add(_showStatus, 0, 4);
             panel.SetColumnSpan(_showStatus, 2);
-            AddRow(panel, 4, "Log level:", _logLevel);
-            panel.Controls.Add(openLogsBtn, 1, 5);
+            panel.Controls.Add(diagnosticsLabel, 0, 5);
+            panel.SetColumnSpan(diagnosticsLabel, 2);
+            AddRow(panel, 6, "Log level:", _logLevel);
+            panel.Controls.Add(openLogsBtn, 1, 7);
 
             tab.Controls.Add(panel);
             return tab;
@@ -316,6 +377,8 @@ namespace Parcl.Addin.Dialogs
             _certValidation.SelectedIndex = (int)_settings.Crypto.ValidationMode;
             _alwaysSign.Checked = _settings.Crypto.AlwaysSign;
             _alwaysEncrypt.Checked = _settings.Crypto.AlwaysEncrypt;
+            _opaqueSign.Checked = _settings.Crypto.OpaqueSign;
+            _includeCertChain.Checked = _settings.Crypto.IncludeCertChain;
 
             // Load behavior
             _autoDecrypt.Checked = _settings.Behavior.AutoDecrypt;
@@ -339,6 +402,8 @@ namespace Parcl.Addin.Dialogs
             _settings.Crypto.ValidationMode = (CertValidationMode)_certValidation.SelectedIndex;
             _settings.Crypto.AlwaysSign = _alwaysSign.Checked;
             _settings.Crypto.AlwaysEncrypt = _alwaysEncrypt.Checked;
+            _settings.Crypto.OpaqueSign = _opaqueSign.Checked;
+            _settings.Crypto.IncludeCertChain = _includeCertChain.Checked;
 
             _settings.Behavior.AutoDecrypt = _autoDecrypt.Checked;
             _settings.Behavior.LogLevel = _logLevel.SelectedItem?.ToString() ?? "Info";

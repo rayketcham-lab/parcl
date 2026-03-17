@@ -18,7 +18,7 @@ namespace Parcl.Addin.Dialogs
             var version = Assembly.GetExecutingAssembly().GetName().Version;
 
             Text = "About Parcl";
-            Size = new Size(420, 380);
+            Size = new Size(420, 440);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -84,6 +84,49 @@ namespace Parcl.Addin.Dialogs
             var supportLink = CreateLink("Support: help@quantumnexum.com",
                 "mailto:help@quantumnexum.com", new Point(26, 222));
 
+            // GitHub action buttons
+            var reportBtn = new Button
+            {
+                Text = "Report Issue",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 60),
+                ForeColor = Color.FromArgb(79, 195, 247),
+                Font = new Font("Segoe UI", 8),
+                Size = new Size(100, 26),
+                Location = new Point(26, 252)
+            };
+            reportBtn.FlatAppearance.BorderColor = Color.FromArgb(79, 195, 247);
+            reportBtn.Click += (s, e) =>
+            {
+                var sysInfo = $"Parcl v{version?.Major}.{version?.Minor}.{version?.Build}";
+                var url = "https://github.com/rayketcham-lab/parcl/issues/new"
+                    + $"?title=Bug:+&body=%23%23+Description%0A%0A%23%23+Steps+to+Reproduce%0A%0A%23%23+System%0A{Uri.EscapeDataString(sysInfo)}";
+                try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+                catch { }
+            };
+
+            var suggestBtn = new Button
+            {
+                Text = "Suggest Feature",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 60),
+                ForeColor = Color.FromArgb(129, 199, 132),
+                Font = new Font("Segoe UI", 8),
+                Size = new Size(110, 26),
+                Location = new Point(134, 252)
+            };
+            suggestBtn.FlatAppearance.BorderColor = Color.FromArgb(129, 199, 132);
+            suggestBtn.Click += (s, e) =>
+            {
+                var url = "https://github.com/rayketcham-lab/parcl/issues/new"
+                    + "?title=feat:+&body=%23%23+Feature+Request%0A%0A%23%23+Use+Case%0A%0A%23%23+Expected+Behavior";
+                try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+                catch { }
+            };
+
+            var viewIssuesLink = CreateLink("View all issues on GitHub",
+                "https://github.com/rayketcham-lab/parcl/issues", new Point(26, 286));
+
             // License
             var licenseLabel = new Label
             {
@@ -91,7 +134,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.FromArgb(100, 100, 110),
                 AutoSize = true,
-                Location = new Point(26, 256)
+                Location = new Point(26, 312)
             };
 
             var copyrightLabel = new Label
@@ -100,7 +143,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.FromArgb(100, 100, 110),
                 AutoSize = true,
-                Location = new Point(26, 274)
+                Location = new Point(26, 330)
             };
 
             // Close button
@@ -113,7 +156,7 @@ namespace Parcl.Addin.Dialogs
                 ForeColor = Color.FromArgb(200, 200, 210),
                 Font = new Font("Segoe UI", 9),
                 Size = new Size(80, 30),
-                Location = new Point(310, 300)
+                Location = new Point(310, 356)
             };
             closeBtn.FlatAppearance.BorderColor = Color.FromArgb(70, 70, 80);
 
@@ -121,6 +164,7 @@ namespace Parcl.Addin.Dialogs
             {
                 titleLabel, subtitleLabel, versionLabel, sep,
                 infoLabel, ghLink, webLink, supportLink,
+                reportBtn, suggestBtn, viewIssuesLink,
                 licenseLabel, copyrightLabel, closeBtn
             });
 
