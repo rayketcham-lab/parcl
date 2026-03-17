@@ -49,7 +49,7 @@ namespace Parcl.Core.Config
 
             _logFile = Path.Combine(_logDir, $"parcl-{DateTime.Now:yyyy-MM-dd}.jsonl");
             _writer = new StreamWriter(
-                new FileStream(_logFile, FileMode.Append, FileAccess.Write, FileShare.Read),
+                new FileStream(_logFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite),
                 Encoding.UTF8)
             { AutoFlush = true };
 
