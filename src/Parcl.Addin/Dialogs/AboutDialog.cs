@@ -50,7 +50,7 @@ namespace Parcl.Addin.Dialogs
 
             var versionLabel = new Label
             {
-                Text = $"Version {version?.Major ?? 1}.{version?.Minor ?? 2}.{version?.Build ?? 0}" +
+                Text = $"Version {System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? $"{version?.Major}.{version?.Minor}.{version?.Build}"}" +
                        (fipsEnabled ? "  |  FIPS Mode" : ""),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.FromArgb(130, 130, 140),
