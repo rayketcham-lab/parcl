@@ -133,7 +133,7 @@ namespace Parcl.Addin.Dialogs
             addBtn.Click += LdapAdd_Click;
             var removeBtn = new Button { Text = "Remove" };
             removeBtn.Click += LdapRemove_Click;
-            var testBtn = new Button { Text = "Test Connection" };
+            var testBtn = new Button { Text = "Test Connection", Width = 110 };
             testBtn.Click += LdapTest_Click;
 
             listButtons.Controls.AddRange(new Control[] { addBtn, removeBtn, testBtn });
@@ -323,44 +323,70 @@ namespace Parcl.Addin.Dialogs
         private TabPage CreateBehaviorTab()
         {
             var tab = new TabPage("General");
-            var panel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                ColumnCount = 2,
-                RowCount = 9,
-                Height = 300,
-                Padding = new Padding(12)
-            };
+            tab.Padding = new Padding(12, 8, 12, 8);
 
-            // Encryption section label
-            var encryptionLabel = new Label
-            {
-                Text = "Encryption",
-                Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold),
-                AutoSize = true,
-                Margin = new Padding(0, 0, 0, 2)
-            };
+            var container = new Panel { Dock = DockStyle.Fill };
+            int y = 4;
 
-            _autoDecrypt = new CheckBox { Text = "Automatically decrypt incoming messages" };
-            _autoLookup = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            // ── Encryption ──
+            var encLabel = new Label { Text = "Encryption", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(encLabel);
+            y += 24;
+
+            _autoDecrypt = new CheckBox { Text = "Automatically decrypt incoming messages", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_autoDecrypt);
+            y += 26;
+
+            _promptMissing = new CheckBox { Text = "Prompt when recipient certificate not found", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_promptMissing);
+            y += 30;
+
+            // ── Certificates ──
+            var sep1 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep1);
+            y += 12;
+
+            var certLabel = new Label { Text = "Certificates", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(certLabel);
+            y += 24;
+
+            var lookupLbl = new Label { Text = "Certificate lookup:", Location = new Point(24, y + 3), Size = new Size(120, 20), Font = new Font("Segoe UI", 9) };
+            _autoLookup = new ComboBox { Location = new Point(150, y), Size = new Size(200, 24), DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 9) };
             _autoLookup.Items.AddRange(new object[] { "Manual", "On Compose", "On Send" });
+            container.Controls.Add(lookupLbl);
+            container.Controls.Add(_autoLookup);
+            y += 34;
 
-            _promptMissing = new CheckBox { Text = "Prompt when recipient certificate not found" };
-            _showStatus = new CheckBox { Text = "Show status bar in Outlook" };
+            // ── UI ──
+            var sep2 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep2);
+            y += 12;
 
-            // Diagnostics section label
-            var diagnosticsLabel = new Label
-            {
-                Text = "Diagnostics",
-                Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold),
-                AutoSize = true,
-                Margin = new Padding(0, 6, 0, 2)
-            };
+            var uiLabel = new Label { Text = "Interface", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(uiLabel);
+            y += 24;
 
-            _logLevel = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            _showStatus = new CheckBox { Text = "Show status bar in Outlook", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_showStatus);
+            y += 30;
+
+            // ── Diagnostics ──
+            var sep3 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep3);
+            y += 12;
+
+            var diagLabel = new Label { Text = "Diagnostics", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(diagLabel);
+            y += 24;
+
+            var logLbl = new Label { Text = "Log level:", Location = new Point(24, y + 3), Size = new Size(120, 20), Font = new Font("Segoe UI", 9) };
+            _logLevel = new ComboBox { Location = new Point(150, y), Size = new Size(140, 24), DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 9) };
             _logLevel.Items.AddRange(new object[] { "Debug", "Info", "Warn", "Error" });
+            container.Controls.Add(logLbl);
+            container.Controls.Add(_logLevel);
+            y += 32;
 
-            var openLogsBtn = new Button { Text = "Open Log Folder", AutoSize = true };
+            var openLogsBtn = new Button { Text = "Open Log Folder", Location = new Point(150, y), Size = new Size(120, 26), Font = new Font("Segoe UI", 9) };
             openLogsBtn.Click += (s, e) =>
             {
                 var logDir = ParclAddIn.Current?.Logger?.GetLogDirectory()
@@ -368,22 +394,9 @@ namespace Parcl.Addin.Dialogs
                 try { System.Diagnostics.Process.Start("explorer.exe", logDir); }
                 catch { }
             };
+            container.Controls.Add(openLogsBtn);
 
-            panel.Controls.Add(encryptionLabel, 0, 0);
-            panel.SetColumnSpan(encryptionLabel, 2);
-            panel.Controls.Add(_autoDecrypt, 0, 1);
-            panel.SetColumnSpan(_autoDecrypt, 2);
-            AddRow(panel, 2, "Certificate lookup:", _autoLookup);
-            panel.Controls.Add(_promptMissing, 0, 3);
-            panel.SetColumnSpan(_promptMissing, 2);
-            panel.Controls.Add(_showStatus, 0, 4);
-            panel.SetColumnSpan(_showStatus, 2);
-            panel.Controls.Add(diagnosticsLabel, 0, 5);
-            panel.SetColumnSpan(diagnosticsLabel, 2);
-            AddRow(panel, 6, "Log level:", _logLevel);
-            panel.Controls.Add(openLogsBtn, 1, 7);
-
-            tab.Controls.Add(panel);
+            tab.Controls.Add(container);
             return tab;
         }
 

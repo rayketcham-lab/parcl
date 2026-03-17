@@ -18,21 +18,21 @@ namespace Parcl.Addin.Dialogs
             var version = Assembly.GetExecutingAssembly().GetName().Version;
 
             Text = "About Parcl";
-            Size = new Size(420, 440);
+            Size = new Size(460, 460);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             BackColor = Color.FromArgb(30, 30, 35);
 
-            // Logo / Title
+            // Logo / Title — sized to not overlap subtitle
             var titleLabel = new Label
             {
                 Text = "PARCL",
-                Font = new Font("Segoe UI", 28, FontStyle.Bold),
+                Font = new Font("Segoe UI", 22, FontStyle.Bold),
                 ForeColor = Color.FromArgb(79, 195, 247),
                 AutoSize = true,
-                Location = new Point(24, 16)
+                Location = new Point(24, 14)
             };
 
             var subtitleLabel = new Label
@@ -41,7 +41,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 10),
                 ForeColor = Color.FromArgb(180, 180, 190),
                 AutoSize = true,
-                Location = new Point(26, 58)
+                Location = new Point(26, 52)
             };
 
             bool fipsEnabled = false;
@@ -55,7 +55,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.FromArgb(130, 130, 140),
                 AutoSize = true,
-                Location = new Point(26, 80)
+                Location = new Point(26, 74)
             };
 
             // Separator
@@ -63,8 +63,8 @@ namespace Parcl.Addin.Dialogs
             {
                 BorderStyle = BorderStyle.Fixed3D,
                 Height = 2,
-                Width = 370,
-                Location = new Point(24, 106)
+                Width = 410,
+                Location = new Point(24, 98)
             };
 
             // Info section
@@ -76,18 +76,18 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.FromArgb(200, 200, 210),
                 AutoSize = true,
-                Location = new Point(26, 118)
+                Location = new Point(26, 110)
             };
 
             // Links
             var ghLink = CreateLink("GitHub: rayketcham-lab/parcl",
-                "https://github.com/rayketcham-lab/parcl", new Point(26, 178));
+                "https://github.com/rayketcham-lab/parcl", new Point(26, 170));
 
             var webLink = CreateLink("quantumnexum.com",
-                "https://quantumnexum.com", new Point(26, 200));
+                "https://quantumnexum.com", new Point(26, 192));
 
             var supportLink = CreateLink("Support: help@quantumnexum.com",
-                "mailto:help@quantumnexum.com", new Point(26, 222));
+                "mailto:help@quantumnexum.com", new Point(26, 214));
 
             // GitHub action buttons
             var reportBtn = new Button
@@ -98,7 +98,7 @@ namespace Parcl.Addin.Dialogs
                 ForeColor = Color.FromArgb(79, 195, 247),
                 Font = new Font("Segoe UI", 8),
                 Size = new Size(100, 26),
-                Location = new Point(26, 252)
+                Location = new Point(26, 244)
             };
             reportBtn.FlatAppearance.BorderColor = Color.FromArgb(79, 195, 247);
             reportBtn.Click += (s, e) =>
@@ -118,7 +118,7 @@ namespace Parcl.Addin.Dialogs
                 ForeColor = Color.FromArgb(129, 199, 132),
                 Font = new Font("Segoe UI", 8),
                 Size = new Size(110, 26),
-                Location = new Point(134, 252)
+                Location = new Point(134, 244)
             };
             suggestBtn.FlatAppearance.BorderColor = Color.FromArgb(129, 199, 132);
             suggestBtn.Click += (s, e) =>
@@ -130,7 +130,7 @@ namespace Parcl.Addin.Dialogs
             };
 
             var viewIssuesLink = CreateLink("View all issues on GitHub",
-                "https://github.com/rayketcham-lab/parcl/issues", new Point(26, 286));
+                "https://github.com/rayketcham-lab/parcl/issues", new Point(26, 278));
 
             // License
             var licenseLabel = new Label
@@ -139,7 +139,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.FromArgb(100, 100, 110),
                 AutoSize = true,
-                Location = new Point(26, 312)
+                Location = new Point(26, 310)
             };
 
             var copyrightLabel = new Label
@@ -148,7 +148,7 @@ namespace Parcl.Addin.Dialogs
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.FromArgb(100, 100, 110),
                 AutoSize = true,
-                Location = new Point(26, 330)
+                Location = new Point(26, 328)
             };
 
             // Close button
@@ -161,7 +161,7 @@ namespace Parcl.Addin.Dialogs
                 ForeColor = Color.FromArgb(200, 200, 210),
                 Font = new Font("Segoe UI", 9),
                 Size = new Size(80, 30),
-                Location = new Point(310, 356)
+                Location = new Point(350, 370)
             };
             closeBtn.FlatAppearance.BorderColor = Color.FromArgb(70, 70, 80);
 
