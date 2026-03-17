@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Parcl — Secure Email Certificate Manager for Outlook</title>
-<meta name="description" content="Parcl is a Microsoft Outlook add-in for S/MIME email encryption, signing, and certificate management with LDAP directory lookup.">
+<meta name="description" content="Parcl is a Microsoft Outlook add-in for S/MIME encryption with inline reading pane decryption, digital signing, and certificate management.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1f512;</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -932,6 +932,7 @@ footer a:hover { color: var(--text); }
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#demo">Demo</a>
+      <a href="#security">Security</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#architecture">Architecture</a>
       <a href="https://github.com/rayketcham-lab/parcl" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.8rem;">
@@ -950,7 +951,7 @@ footer a:hover { color: var(--text); }
 
   <div class="hero-badge">
     <span class="pulse"></span>
-    Open Source &middot; Apache 2.0 License
+    v0.10.0-rc1 &middot; Open Source &middot; Apache 2.0 License
   </div>
 
   <h1>
@@ -959,7 +960,7 @@ footer a:hover { color: var(--text); }
   </h1>
 
   <p class="hero-sub">
-    Parcl is a lightweight Outlook add-in that brings S/MIME encryption, digital signing, and certificate management to your inbox. No admin install required.
+    Encrypted messages display inline in the reading pane &mdash; no .p7m attachments, no external tools. Parcl brings S/MIME encryption, digital signing, and certificate management directly into Outlook. No admin install required.
   </p>
 
   <div class="hero-actions">
@@ -977,20 +978,20 @@ footer a:hover { color: var(--text); }
 <div class="stats fade-up">
   <div class="stats-inner">
     <div class="stat">
-      <div class="stat-value">S/MIME</div>
-      <div class="stat-label">End-to-End Encryption</div>
+      <div class="stat-value">Inline</div>
+      <div class="stat-label">Reading Pane Encryption</div>
     </div>
     <div class="stat">
-      <div class="stat-value">LDAP</div>
-      <div class="stat-label">Auto Cert Discovery</div>
+      <div class="stat-value">28</div>
+      <div class="stat-label">Tests Passing</div>
     </div>
     <div class="stat">
       <div class="stat-value">0</div>
       <div class="stat-label">Admin Privileges</div>
     </div>
     <div class="stat">
-      <div class="stat-value">VSTO</div>
-      <div class="stat-label">Deep Outlook Integration</div>
+      <div class="stat-value">FIPS</div>
+      <div class="stat-label">140-2 Compatible</div>
     </div>
   </div>
 </div>
@@ -1009,7 +1010,7 @@ footer a:hover { color: var(--text); }
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent-light)" stroke-width="1.5"><rect x="3" y="8" width="14" height="9" rx="2"/><path d="M6 8V5a4 4 0 018 0v3"/></svg>
       </div>
       <h3>Encrypt &amp; Decrypt</h3>
-      <p>Send and receive encrypted emails using S/MIME certificates. Your messages stay private, end to end.</p>
+      <p>Encrypted messages display inline in the reading pane &mdash; no .p7m attachments to open. Native Outlook S/MIME compatible with Entrust and Thunderbird.</p>
     </div>
 
     <div class="feature-card">
@@ -1017,15 +1018,15 @@ footer a:hover { color: var(--text); }
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--cyan)" stroke-width="1.5"><path d="M5 10l3 3 7-7"/><circle cx="10" cy="10" r="8"/></svg>
       </div>
       <h3>Digital Signatures</h3>
-      <p>Sign outgoing emails to prove authenticity and detect tampering. Recipients can verify your identity.</p>
+      <p>Sign outgoing emails with clear or opaque signatures. Supports sign-then-encrypt per RFC 5751 for maximum interoperability.</p>
     </div>
 
     <div class="feature-card">
       <div class="feature-icon green">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 11h5v5h-5z"/></svg>
       </div>
-      <h3>Certificate Selector</h3>
-      <p>Browse and choose signing and encryption certificates from your Windows certificate store.</p>
+      <h3>Certificate Manager</h3>
+      <p>Browse your Windows certificate store and manage certificates for external contacts via the Certificate Contacts dialog.</p>
     </div>
 
     <div class="feature-card">
@@ -1033,7 +1034,7 @@ footer a:hover { color: var(--text); }
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--cyan)" stroke-width="1.5"><path d="M3 10a7 7 0 0114 0M6 10a4 4 0 018 0"/><circle cx="10" cy="10" r="1.5" fill="var(--cyan)"/></svg>
       </div>
       <h3>LDAP Lookup</h3>
-      <p>Automatically discover recipient certificates through your organization's LDAP directory services.</p>
+      <p>Optional LDAP directory lookup for recipient certificates. Queries are sanitized with RFC 4515 injection prevention built in.</p>
     </div>
 
     <div class="feature-card">
@@ -1049,7 +1050,7 @@ footer a:hover { color: var(--text); }
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M10 2l2 4h4l-3.5 3 1.5 4.5L10 11l-4 2.5L7.5 9 4 6h4l2-4z"/></svg>
       </div>
       <h3>Security Dashboard</h3>
-      <p>An animated task pane that shows your security status at a glance &mdash; certificate health, encryption state, and more.</p>
+      <p>Animated task pane with FIPS mode indicator, configurable log levels, and GitHub issue integration for one-click bug reporting.</p>
     </div>
   </div>
 </section>
@@ -1088,6 +1089,7 @@ footer a:hover { color: var(--text); }
 <span class="t-prompt">&gt;</span> <span class="t-cmd">Parcl</span> <span class="t-flag">Encrypt + Sign</span>
 <span class="t-success">  &#10003; Message encrypted</span> <span class="t-output">(AES-256-CBC)</span>
 <span class="t-success">  &#10003; Message signed</span> <span class="t-output">(SHA-256 / RSA)</span>
+<span class="t-success">  &#10003; Inline reading pane display</span> <span class="t-output">enabled</span>
 <span class="t-icon">  &#128274;</span> <span class="t-success">Ready to send</span>
       </div>
     </div>
@@ -1290,6 +1292,60 @@ footer a:hover { color: var(--text); }
       </div>
       <h3>No Admin Required</h3>
       <p>Per-user HKCU install</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- Security -->
+<section class="section fade-up" id="security">
+  <div class="section-label">Security</div>
+  <h2>Built with defense in depth</h2>
+  <p>Parcl protects your data at every layer &mdash; from credentials to configuration to the messages themselves.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon blue">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent-light)" stroke-width="1.5"><path d="M10 2l6 3v5c0 4-3 7-6 8-3-1-6-4-6-8V5l6-3z"/></svg>
+      </div>
+      <h3>HMAC Settings Integrity</h3>
+      <p>Configuration files are protected with HMAC verification to detect unauthorized tampering.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon cyan">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--cyan)" stroke-width="1.5"><rect x="3" y="8" width="14" height="9" rx="2"/><path d="M6 8V5a4 4 0 018 0v3"/></svg>
+      </div>
+      <h3>DPAPI Credential Protection</h3>
+      <p>LDAP credentials are encrypted at rest using Windows Data Protection API, scoped to the current user.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon green">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M5 10l3 3 7-7"/><circle cx="10" cy="10" r="8"/></svg>
+      </div>
+      <h3>PII Sanitization</h3>
+      <p>Diagnostic logs automatically strip email addresses, certificate subjects, and other personally identifiable information.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon blue">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent-light)" stroke-width="1.5"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>
+      </div>
+      <h3>FIPS 140-2 Compatible</h3>
+      <p>All cryptographic operations use Windows CNG providers. FIPS mode can be enabled system-wide without code changes.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon cyan">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--cyan)" stroke-width="1.5"><path d="M7 3h6l4 4v10a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1h3z"/><path d="M7 3v4h6"/></svg>
+      </div>
+      <h3>Apache 2.0 License</h3>
+      <p>Fully open source with patent grant. Inspect every line, audit the cryptography, contribute improvements.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon green">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M3 10a7 7 0 0114 0M6 10a4 4 0 018 0"/><circle cx="10" cy="10" r="1.5" fill="var(--green)"/></svg>
+      </div>
+      <h3>RFC 4515 Injection Prevention</h3>
+      <p>All LDAP filter inputs are sanitized to prevent injection attacks against directory services.</p>
     </div>
   </div>
 </section>
