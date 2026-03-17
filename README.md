@@ -164,11 +164,19 @@ Settings: `%APPDATA%\Parcl\settings.json` (DPAPI-encrypted credentials, HMAC int
 Logs: `%APPDATA%\Parcl\logs\parcl-YYYY-MM-DD.jsonl`
 
 ```powershell
-# View all errors
-Get-Content "$env:APPDATA\Parcl\logs\parcl-*.jsonl" | ConvertFrom-Json | Where-Object lvl -eq "ERROR"
+# View all errors (today's log)
+Get-Content "$env:APPDATA\Parcl\logs\parcl-$(Get-Date -Format 'yyyy-MM-dd').jsonl" |
+  ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } |
+  Where-Object lvl -eq "ERROR"
 
 # Filter by component
-Get-Content "$env:APPDATA\Parcl\logs\parcl-*.jsonl" | ConvertFrom-Json | Where-Object cmp -eq "Encrypt"
+Get-Content "$env:APPDATA\Parcl\logs\parcl-$(Get-Date -Format 'yyyy-MM-dd').jsonl" |
+  ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } |
+  Where-Object cmp -eq "Encrypt"
+
+# Tail live (watch new entries)
+Get-Content "$env:APPDATA\Parcl\logs\parcl-$(Get-Date -Format 'yyyy-MM-dd').jsonl" -Wait -Tail 10 |
+  ForEach-Object { try { $_ | ConvertFrom-Json } catch {} }
 ```
 
 ---
