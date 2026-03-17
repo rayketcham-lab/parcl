@@ -76,7 +76,7 @@ namespace Parcl.Core.Config
         /// can decrypt. When false, uses Parcl's own CMS envelope (smime.p7m attachment) which
         /// supports protected headers (RFC 7508) but requires Parcl on the receiving end.
         /// </summary>
-        public bool UseNativeSmime { get; set; } = true;
+        public bool UseNativeSmime { get; set; } = false;
 
         /// <summary>
         /// When false (default), produces clear-signed messages where content is readable

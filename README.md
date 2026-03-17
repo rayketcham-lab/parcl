@@ -16,11 +16,40 @@ Parcl is a Microsoft Outlook COM add-in that brings end-to-end S/MIME email encr
 
 ## Why Parcl?
 
-- **Inline decryption** — Encrypted messages render directly in the Outlook reading pane. No separate viewer, no raw `.p7m` files.
-- **Dual-mode encryption** — Native Outlook S/MIME via `PR_SECURITY_FLAGS` (compatible with any S/MIME client) and Parcl envelope mode with RFC 7508 protected headers for Parcl-to-Parcl communication.
+- **End-to-end encryption** — Messages are encrypted on your machine before leaving Outlook. Only the intended recipient can decrypt.
+- **Dual-mode encryption** — Two distinct modes for different scenarios (see below).
 - **Deferred encryption** — Toggle Encrypt while composing. Edit normally. Encryption happens transparently at send time.
 - **Enterprise-ready** — RDN/CN-to-email matching handles enterprise certificate mismatches where the certificate CN does not match the email address.
 - **Zero admin** — Per-user MSI installer. HKCU registry only. No administrator privileges required.
+
+---
+
+## Encryption Modes
+
+Parcl supports two encryption modes, selectable in **Options > Cryptography**:
+
+### Parcl Envelope Mode (Default)
+
+Parcl builds its own CMS/PKCS#7 encrypted envelope and delivers it as a `smime.p7m` attachment. This mode:
+
+- **Requires Parcl on both ends** — the recipient needs Parcl installed to decrypt
+- **Protects email headers** — Subject, From, To, Date are encrypted inside the envelope per RFC 7508 (hidden from transport)
+- **Sign-then-encrypt** — digital signature is protected inside the encrypted envelope per RFC 5751
+- **Works across all Exchange environments** — no dependency on Outlook's native S/MIME engine or Trust Center configuration
+- **Handles cert mismatches** — works even when the certificate email doesn't match the recipient's SMTP address (common in enterprise environments)
+
+Best for: **Parcl-to-Parcl communication** where both parties have the add-in installed.
+
+### Native Outlook S/MIME Mode (Optional)
+
+Parcl sets `PR_SECURITY_FLAGS` to let Outlook's own S/MIME engine handle encryption. This mode:
+
+- **Compatible with any S/MIME client** — recipients don't need Parcl; any RFC 5751 client can decrypt
+- **Inline reading pane display** — encrypted messages render directly in the Outlook reading pane with no `.p7m` attachment
+- **Requires cert/email match** — Outlook's native engine can only find certificates where the certificate email matches the recipient's SMTP address
+- **Auto-fallback** — if a cert mismatch is detected, Parcl automatically falls back to Parcl Envelope mode for that message
+
+Best for: **Same-domain or self-send** where certs match SMTP addresses, or organizations where all users have properly provisioned S/MIME certificates.
 
 ---
 
