@@ -10,6 +10,7 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Office.Core;
 using Parcl.Addin.Dialogs;
+using Parcl.Core.Config;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace Parcl.Addin
@@ -271,7 +272,7 @@ namespace Parcl.Addin
                 catch { subjectPreview = "(unavailable)"; }
 
                 Logger.Info("Decrypt",
-                    $"Decrypt clicked — from: {senderAddr}, subject: {subjectPreview}");
+                    $"Decrypt clicked — from: {ParclLogger.SanitizeEmail(senderAddr)}, subject: {subjectPreview}");
 
                 Outlook.Attachment? smimeAttachment = null;
                 int smimeAttachmentIndex = -1;
@@ -554,7 +555,7 @@ namespace Parcl.Addin
                 }
 
                 Logger.Info("Lookup",
-                    $"LDAP lookup triggered — recipients: {mail.To}");
+                    $"LDAP lookup triggered — recipients: {ParclLogger.SanitizeEmail(mail.To)}");
 
                 var directories = Settings.LdapDirectories
                     .Where(d => d.Enabled).ToList();
@@ -568,24 +569,42 @@ namespace Parcl.Addin
                 }
 
                 int found = 0;
-                for (int i = 1; i <= mail.Recipients.Count; i++)
+                Outlook.Recipients? recipients = null;
+                try
                 {
-                    var addr = mail.Recipients[i].Address;
-                    var certs = LdapLookup
-                        .LookupAcrossDirectoriesAsync(addr, directories).Result;
-                    found += certs.Count;
-
-                    foreach (var certInfo in certs)
+                    recipients = mail.Recipients;
+                    for (int i = 1; i <= recipients.Count; i++)
                     {
-                        if (CertStore.FindByThumbprint(certInfo.Thumbprint) == null)
+                        Outlook.Recipient? rcpt = null;
+                        try
                         {
-                            Logger.Debug("Lookup",
-                                $"Certificate {certInfo.Thumbprint.Substring(0, 8)} " +
-                                "found via LDAP but needs import");
+                            rcpt = recipients[i];
+                            var addr = rcpt.Address;
+                            var certs = LdapLookup
+                                .LookupAcrossDirectoriesAsync(addr, directories).Result;
+                            found += certs.Count;
+
+                            foreach (var certInfo in certs)
+                            {
+                                if (CertStore.FindByThumbprint(certInfo.Thumbprint) == null)
+                                {
+                                    Logger.Debug("Lookup",
+                                        $"Certificate {certInfo.Thumbprint.Substring(0, 8)} " +
+                                        "found via LDAP but needs import");
+                                }
+                            }
+
+                            CertCache.Add(addr, certs);
+                        }
+                        finally
+                        {
+                            if (rcpt != null) Marshal.ReleaseComObject(rcpt);
                         }
                     }
-
-                    CertCache.Add(addr, certs);
+                }
+                finally
+                {
+                    if (recipients != null) Marshal.ReleaseComObject(recipients);
                 }
 
                 Logger.Info("Lookup",
@@ -680,7 +699,7 @@ namespace Parcl.Addin
         private void EncryptOutgoing(Outlook.MailItem mail)
         {
             Logger.Info("Encrypt",
-                $"Encrypt toggled ON — to: {mail.To}, subject: {Truncate(mail.Subject, 30)}");
+                $"Encrypt toggled ON — to: {ParclLogger.SanitizeEmail(mail.To)}, subject: {Truncate(mail.Subject, 30)}");
 
             // Set a user property flag so ItemSend knows to encapsulate
             var flag = mail.UserProperties.Find("ParclEncrypt") ??
@@ -873,9 +892,10 @@ namespace Parcl.Addin
         private X509Certificate2? ResolveRecipientCert(string email, Outlook.Recipient recipient)
         {
             // 1. Try AddressEntry's X.509 certificate property (works for GAL, Exchange, and contacts)
+            Outlook.AddressEntry? addrEntry = null;
             try
             {
-                var addrEntry = recipient.AddressEntry;
+                addrEntry = recipient.AddressEntry;
                 if (addrEntry != null)
                 {
                     // PR_USER_X509_CERTIFICATE is a multi-valued binary property (PT_MV_BINARY = 0x1102)
@@ -906,9 +926,10 @@ namespace Parcl.Addin
                     catch { /* Property not available on this AddressEntry */ }
 
                     // 2. Try Exchange user object (GAL users)
+                    Outlook.ExchangeUser? exchUser = null;
                     try
                     {
-                        var exchUser = addrEntry.GetExchangeUser();
+                        exchUser = addrEntry.GetExchangeUser();
                         if (exchUser != null)
                         {
                             try
@@ -936,16 +957,19 @@ namespace Parcl.Addin
                                 }
                             }
                             catch { }
-
-                            Marshal.ReleaseComObject(exchUser);
                         }
                     }
                     catch { /* Not an Exchange user */ }
+                    finally
+                    {
+                        if (exchUser != null) Marshal.ReleaseComObject(exchUser);
+                    }
 
                     // 3. Try Outlook contact object
+                    Outlook.ContactItem? contact = null;
                     try
                     {
-                        var contact = addrEntry.GetContact();
+                        contact = addrEntry.GetContact();
                         if (contact != null)
                         {
                             try
@@ -973,14 +997,20 @@ namespace Parcl.Addin
                                 }
                             }
                             catch { }
-
-                            Marshal.ReleaseComObject(contact);
                         }
                     }
                     catch { /* Contact lookup not available */ }
+                    finally
+                    {
+                        if (contact != null) Marshal.ReleaseComObject(contact);
+                    }
                 }
             }
             catch { /* AddressEntry access failed */ }
+            finally
+            {
+                if (addrEntry != null) Marshal.ReleaseComObject(addrEntry);
+            }
 
             // 4. Windows certificate stores (AddressBook → My)
             var storeCert = CertStore.FindByEmail(email);
@@ -1159,7 +1189,7 @@ namespace Parcl.Addin
 
                     Logger.Info("Import",
                         $"Certificate imported from attachment: {info.Subject} " +
-                        $"[{info.Thumbprint.Substring(0, 8)}] from {importSender}");
+                        $"[{info.Thumbprint.Substring(0, 8)}] from {ParclLogger.SanitizeEmail(importSender)}");
 
                     // Cache it for the sender
                     if (!string.IsNullOrEmpty(importSender))

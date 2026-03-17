@@ -88,9 +88,9 @@ namespace Parcl.Core.Crypto
                 {
                     var safeName = SanitizeFilename(att.FileName);
                     sb.AppendLine($"--{boundary}");
-                    sb.AppendLine($"Content-Type: application/octet-stream; name=\"{safeName}\"");
+                    sb.AppendLine($"Content-Type: application/octet-stream; {EncodeRfc2231("name", safeName)}");
                     sb.AppendLine("Content-Transfer-Encoding: base64");
-                    sb.AppendLine($"Content-Disposition: attachment; filename=\"{safeName}\"");
+                    sb.AppendLine($"Content-Disposition: attachment; {EncodeRfc2231("filename", safeName)}");
                     sb.AppendLine();
                     sb.AppendLine(WrapBase64(Convert.ToBase64String(att.Data)));
                 }
@@ -391,6 +391,54 @@ namespace Parcl.Core.Crypto
                 result.TextBody = decoded;
 
             return result;
+        }
+
+        /// <summary>
+        /// RFC 2231 MIME parameter encoding for non-ASCII filenames.
+        /// If the value is pure ASCII, returns normal paramName="value".
+        /// If non-ASCII, returns paramName*=UTF-8''percent-encoded-value.
+        /// </summary>
+        public static string EncodeRfc2231(string paramName, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return $"{paramName}=\"\"";
+
+            // Check if value is pure ASCII
+            bool isAscii = true;
+            foreach (char c in value)
+            {
+                if (c > 127)
+                {
+                    isAscii = false;
+                    break;
+                }
+            }
+
+            if (isAscii)
+                return $"{paramName}=\"{value}\"";
+
+            // RFC 2231: paramName*=charset'language'encoded-value
+            var encoded = new StringBuilder();
+            encoded.Append($"{paramName}*=UTF-8''");
+
+            byte[] utf8Bytes = Encoding.UTF8.GetBytes(value);
+            foreach (byte b in utf8Bytes)
+            {
+                // RFC 2231 uses percent-encoding. Safe chars: ALPHA / DIGIT / "!" / "#" / "$" / "&" /
+                // "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+                if ((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') ||
+                    b == '!' || b == '#' || b == '$' || b == '&' || b == '+' || b == '-' ||
+                    b == '.' || b == '^' || b == '_' || b == '`' || b == '|' || b == '~')
+                {
+                    encoded.Append((char)b);
+                }
+                else
+                {
+                    encoded.Append($"%{b:X2}");
+                }
+            }
+
+            return encoded.ToString();
         }
 
         private static string WrapBase64(string b64)

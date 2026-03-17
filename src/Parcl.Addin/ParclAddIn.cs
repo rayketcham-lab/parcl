@@ -368,7 +368,7 @@ namespace Parcl.Addin
             var subjectPreview = mail.Subject != null
                 ? mail.Subject.Substring(0, Math.Min(30, mail.Subject.Length))
                 : "(no subject)";
-            Logger.Info("Send", $"ItemSend intercepted — to: {mail.To}, subject: {subjectPreview}");
+            Logger.Info("Send", $"ItemSend intercepted — to: {ParclLogger.SanitizeEmail(mail.To)}, subject: {subjectPreview}");
 
             bool shouldEncryptRequested = false;
             try
@@ -449,7 +449,7 @@ namespace Parcl.Addin
                                             PR_USER_X509_CERT,
                                             new object[] { certBytes });
                                         Logger.Info("Send",
-                                            $"Cert published for {smtpAddr}: {cert.Subject}");
+                                            $"Cert published for {ParclLogger.SanitizeEmail(smtpAddr)}: {cert.Subject}");
                                     }
                                 }
                                 catch (Exception pubEx)
@@ -459,7 +459,7 @@ namespace Parcl.Addin
                             }
                             else
                             {
-                                Logger.Warn("Send", $"No valid cert for {smtpAddr}");
+                                Logger.Warn("Send", $"No valid cert for {ParclLogger.SanitizeEmail(smtpAddr)}");
                             }
                         }
 
@@ -594,7 +594,7 @@ namespace Parcl.Addin
                 if (cert == null)
                 {
                     errors.Add($"{smtpAddr}: No certificate found");
-                    Logger.Warn("Send", $"No certificate found for {smtpAddr}");
+                    Logger.Warn("Send", $"No certificate found for {ParclLogger.SanitizeEmail(smtpAddr)}");
                     continue;
                 }
 
@@ -602,18 +602,18 @@ namespace Parcl.Addin
                 if (cert.NotAfter <= DateTime.UtcNow)
                 {
                     errors.Add($"{smtpAddr}: Certificate expired on {cert.NotAfter:yyyy-MM-dd}");
-                    Logger.Warn("Send", $"Certificate expired for {smtpAddr} (expired {cert.NotAfter:yyyy-MM-dd})");
+                    Logger.Warn("Send", $"Certificate expired for {ParclLogger.SanitizeEmail(smtpAddr)} (expired {cert.NotAfter:yyyy-MM-dd})");
                     continue;
                 }
 
                 if (cert.NotBefore > DateTime.UtcNow)
                 {
                     errors.Add($"{smtpAddr}: Certificate not yet valid (starts {cert.NotBefore:yyyy-MM-dd})");
-                    Logger.Warn("Send", $"Certificate not yet valid for {smtpAddr}");
+                    Logger.Warn("Send", $"Certificate not yet valid for {ParclLogger.SanitizeEmail(smtpAddr)}");
                     continue;
                 }
 
-                Logger.Info("Send", $"Cert OK for {smtpAddr}: {cert.Subject}, expires {cert.NotAfter:yyyy-MM-dd}");
+                Logger.Info("Send", $"Cert OK for {ParclLogger.SanitizeEmail(smtpAddr)}: {cert.Subject}, expires {cert.NotAfter:yyyy-MM-dd}");
                 recipientCerts.Add(cert);
             }
 

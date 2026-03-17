@@ -17,6 +17,12 @@ namespace Parcl.Core.Crypto
                 ["AES-128-CBC"] = "2.16.840.1.101.3.4.1.2",
                 ["AES-192-CBC"] = "2.16.840.1.101.3.4.1.22",
                 ["AES-256-CBC"] = "2.16.840.1.101.3.4.1.42",
+                // AES-GCM authenticated encryption (NIST SP 800-38D).
+                // Note: .NET Framework 4.8 EnvelopedCms may not support GCM OIDs at runtime.
+                // If the runtime does not support them, the Encrypt() call will throw a
+                // CryptographicException and the user will see an error message.
+                ["AES-128-GCM"] = "2.16.840.1.101.3.4.1.6",
+                ["AES-256-GCM"] = "2.16.840.1.101.3.4.1.46",
             };
 
         // OID lookup for hash algorithms
@@ -48,6 +54,17 @@ namespace Parcl.Core.Crypto
                 DigestAlgorithm = new Oid(hashOid)
             };
             signer.IncludeOption = X509IncludeOption.WholeChain;
+
+            // RFC 6211: Algorithm Protection attribute (OID 1.2.840.113549.1.9.52)
+            // This signed attribute binds the digest and signature algorithms to the
+            // signature, preventing algorithm substitution attacks.
+            // .NET Framework 4.8 CmsSigner.SignedAttributes is available, but building
+            // the correct ASN.1 structure for the CMSAlgorithmProtection attribute
+            // requires manual DER encoding. The attribute value contains:
+            //   digestAlgorithm AlgorithmIdentifier, signatureAlgorithm [1] AlgorithmIdentifier
+            // TODO: Implement full ASN.1 DER encoding for CMSAlgorithmProtection when
+            // a suitable ASN.1 library is available. .NET 4.8 does not provide a public
+            // ASN.1 writer, and hand-rolling DER is error-prone for production use.
 
             signedCms.ComputeSignature(signer);
             return signedCms.Encode();

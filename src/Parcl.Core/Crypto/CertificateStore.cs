@@ -62,7 +62,9 @@ namespace Parcl.Core.Crypto
 
         private static X509Certificate2? FindByEmailInStore(string email, StoreName storeName)
         {
-            var normalizedEmail = email.Trim().ToLowerInvariant();
+            // RFC 8398: Normalize internationalized email addresses to NFC
+            // before comparison so that equivalent Unicode representations match.
+            var normalizedEmail = email.Trim().Normalize(System.Text.NormalizationForm.FormC).ToLowerInvariant();
             using (var store = new X509Store(storeName, StoreLocation.CurrentUser))
             {
                 try

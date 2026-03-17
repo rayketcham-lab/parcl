@@ -36,9 +36,11 @@ namespace Parcl.Core.Crypto
         public CertificateInfo ImportFromPayload(CertExchangePayload payload)
         {
             var certData = Convert.FromBase64String(payload.CertificateData);
+            var cert = new X509Certificate2(certData);
             _certStore.ImportCertificate(certData);
 
-            var cert = new X509Certificate2(certData);
+            // Reuse the cert object already created above instead of
+            // constructing a redundant X509Certificate2 from the same bytes.
             return CertificateInfo.FromX509(cert);
         }
 

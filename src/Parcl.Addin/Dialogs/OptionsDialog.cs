@@ -203,7 +203,7 @@ namespace Parcl.Addin.Dialogs
             };
 
             _encAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC" });
+            _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC", "AES-128-GCM", "AES-256-GCM" });
 
             _hashAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             _hashAlgo.Items.AddRange(new object[] { "SHA-256", "SHA-384", "SHA-512" });
