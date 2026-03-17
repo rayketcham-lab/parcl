@@ -74,3 +74,4 @@ publish/
 secrets.json
 appsettings.Development.json
 .claude/
+tests/certs/*.key
