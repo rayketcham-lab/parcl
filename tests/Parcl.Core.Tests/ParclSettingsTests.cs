@@ -53,6 +53,43 @@ namespace Parcl.Core.Tests
         }
 
         [Fact]
+        public void UseNativeSmime_DefaultsTrue()
+        {
+            var settings = new ParclSettings();
+            Assert.True(settings.Crypto.UseNativeSmime,
+                "UseNativeSmime should default to true (native S/MIME for interoperability). " +
+                "Changing this default breaks encryption for recipients without Parcl.");
+        }
+
+        [Fact]
+        public void OpaqueSign_DefaultsFalse()
+        {
+            var settings = new ParclSettings();
+            Assert.False(settings.Crypto.OpaqueSign);
+        }
+
+        [Fact]
+        public void IncludeCertChain_DefaultsTrue()
+        {
+            var settings = new ParclSettings();
+            Assert.True(settings.Crypto.IncludeCertChain);
+        }
+
+        [Fact]
+        public void AlwaysEncrypt_DefaultsFalse()
+        {
+            var settings = new ParclSettings();
+            Assert.False(settings.Crypto.AlwaysEncrypt);
+        }
+
+        [Fact]
+        public void AlwaysSign_DefaultsFalse()
+        {
+            var settings = new ParclSettings();
+            Assert.False(settings.Crypto.AlwaysSign);
+        }
+
+        [Fact]
         public void LdapDirectoryEntry_ConnectionString_NoSsl()
         {
             var entry = new LdapDirectoryEntry

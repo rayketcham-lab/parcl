@@ -31,6 +31,16 @@ namespace Parcl.Core.Config
             if (!SettingsIntegrity.VerifyHmac(json, out var failureReason))
             {
                 Trace.TraceWarning($"[Parcl.Settings] {failureReason}");
+
+                // If the HMAC key exists but verification failed, settings may be tampered.
+                // Reset to safe defaults and rewrite the HMAC.
+                if (File.Exists(Path.Combine(SettingsDir, "settings.key")) &&
+                    File.Exists(Path.Combine(SettingsDir, "settings.json.hmac")))
+                {
+                    Trace.TraceWarning("[Parcl.Settings] Tampered settings detected — resetting to defaults");
+                    return CreateDefault();
+                }
+                // Otherwise this is first-run or pre-integrity migration — load normally
             }
 
             return JsonConvert.DeserializeObject<ParclSettings>(json) ?? CreateDefault();
@@ -76,7 +86,7 @@ namespace Parcl.Core.Config
         /// can decrypt. When false, uses Parcl's own CMS envelope (smime.p7m attachment) which
         /// supports protected headers (RFC 7508) but requires Parcl on the receiving end.
         /// </summary>
-        public bool UseNativeSmime { get; set; } = false;
+        public bool UseNativeSmime { get; set; } = true;
 
         /// <summary>
         /// When false (default), produces clear-signed messages where content is readable

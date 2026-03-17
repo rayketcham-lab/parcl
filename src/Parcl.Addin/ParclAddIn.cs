@@ -120,6 +120,21 @@ namespace Parcl.Addin
             catch (Exception ex)
             {
                 Logger.Error("AddIn", "Failed during startup", ex);
+
+                // Health indicator: warn user that encryption enforcement is offline
+                try
+                {
+                    MessageBox.Show(
+                        "Parcl failed to initialize.\n\n" +
+                        $"Why: {ex.Message}\n\n" +
+                        "Impact: Email encryption and signing are NOT active. " +
+                        "Messages will be sent unencrypted until this is resolved.\n\n" +
+                        "Fix: Restart Outlook. If this persists, reinstall Parcl or check the log at " +
+                        "%APPDATA%\\Parcl\\logs\\",
+                        "Parcl — Startup Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch { }
             }
         }
 
@@ -399,41 +414,41 @@ namespace Parcl.Addin
             bool shouldEncryptRequested = false;
             try
             {
-                // ── Determine what's requested ──
-                bool shouldSign = false;
-                bool shouldEncrypt = false;
+                // ── Determine what's requested via SendDecision ──
+                var parclEncryptFlag = false;
+                var parclSignFlag = false;
 
-                var signFlag = mail.UserProperties.Find("ParclSign");
-                if (signFlag != null && (bool)signFlag.Value)
-                {
-                    shouldSign = true;
-                    Logger.Debug("Send", "Sign flag set by user toggle");
-                }
+                var encryptProp = mail.UserProperties.Find("ParclEncrypt");
+                if (encryptProp != null && (bool)encryptProp.Value)
+                    parclEncryptFlag = true;
 
-                if (Settings.Crypto.AlwaysSign &&
-                    !string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
+                var signProp = mail.UserProperties.Find("ParclSign");
+                if (signProp != null && (bool)signProp.Value)
+                    parclSignFlag = true;
+
+                bool hasSigningCert = false;
+                if (!string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
                 {
                     var signingCert = CertStore.FindByThumbprint(
                         Settings.UserProfile.SigningCertThumbprint!);
-                    if (signingCert != null && signingCert.HasPrivateKey)
-                    {
-                        shouldSign = true;
-                        Logger.Debug("Send", "Sign enabled by AlwaysSign setting");
-                    }
+                    hasSigningCert = signingCert != null && signingCert.HasPrivateKey;
                 }
 
-                var encryptFlag = mail.UserProperties.Find("ParclEncrypt");
-                if (encryptFlag != null && (bool)encryptFlag.Value)
-                {
-                    shouldEncrypt = true;
-                    Logger.Debug("Send", "Encrypt flag set by user toggle");
-                }
+                var decision = Parcl.Core.Crypto.SendDecision.Evaluate(
+                    parclEncryptFlag,
+                    parclSignFlag,
+                    Settings.Crypto.AlwaysEncrypt,
+                    Settings.Crypto.AlwaysSign,
+                    hasSigningCert,
+                    Settings.Crypto.UseNativeSmime);
 
-                if (Settings.Crypto.AlwaysEncrypt)
-                {
-                    shouldEncrypt = true;
-                    Logger.Debug("Send", "Encrypt enabled by AlwaysEncrypt setting");
-                }
+                bool shouldEncrypt = decision.ShouldEncrypt;
+                bool shouldSign = decision.ShouldSign;
+
+                if (decision.EncryptSource != null)
+                    Logger.Debug("Send", $"Encrypt enabled by {decision.EncryptSource}");
+                if (decision.SignSource != null)
+                    Logger.Debug("Send", $"Sign enabled by {decision.SignSource}");
 
                 shouldEncryptRequested = shouldEncrypt;
                 Logger.Info("Send", $"Send mode: encrypt={shouldEncrypt}, sign={shouldSign}");

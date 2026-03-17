@@ -1,0 +1,119 @@
+name: Encryption Enforcement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  encryption-tests:
+    name: Encryption & Security Tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore packages
+        run: dotnet restore tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj
+
+      - name: Build tests
+        run: dotnet build tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore
+
+      - name: Run encryption tests
+        run: |
+          dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision"
+
+  send-decision-audit:
+    name: SendDecision Coverage Audit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify SendDecision is used in ItemSend
+        shell: bash
+        run: |
+          echo "=== Checking SendDecision usage in ItemSend handler ==="
+          if ! grep -q "SendDecision.Evaluate" src/Parcl.Addin/ParclAddIn.cs; then
+            echo "::error::Application_ItemSend must use SendDecision.Evaluate for encryption decisions"
+            echo "Direct flag checks bypass testable logic and COM automation coverage"
+            exit 1
+          fi
+          echo "SendDecision.Evaluate found in ParclAddIn.cs"
+
+      - name: Verify AlwaysEncrypt is evaluated
+        shell: bash
+        run: |
+          echo "=== Checking AlwaysEncrypt enforcement ==="
+          if ! grep -q "alwaysEncrypt\|AlwaysEncrypt" src/Parcl.Core/Crypto/SendDecision.cs; then
+            echo "::error::SendDecision must evaluate AlwaysEncrypt setting"
+            echo "COM automation emails bypass per-message flags and depend on AlwaysEncrypt"
+            exit 1
+          fi
+          echo "AlwaysEncrypt check found in SendDecision.cs"
+
+      - name: Verify fail-closed on encryption error
+        shell: bash
+        run: |
+          echo "=== Checking fail-closed behavior ==="
+          if ! grep -q "cancel = true" src/Parcl.Addin/ParclAddIn.cs; then
+            echo "::error::ItemSend must set cancel=true when encryption fails (fail-closed)"
+            exit 1
+          fi
+          echo "Fail-closed (cancel=true) confirmed"
+
+      - name: Verify health indicator on startup failure
+        shell: bash
+        run: |
+          echo "=== Checking add-in health indicator ==="
+          if ! grep -q "Parcl failed to initialize\|Startup Error" src/Parcl.Addin/ParclAddIn.cs; then
+            echo "::error::OnConnection must warn user when add-in fails to load"
+            echo "Silent failure means encryption enforcement is offline with no warning"
+            exit 1
+          fi
+          echo "Health indicator found in OnConnection"
+
+      - name: Verify HMAC enforcement on settings
+        shell: bash
+        run: |
+          echo "=== Checking HMAC enforcement ==="
+          if ! grep -q "Tampered settings detected\|resetting to defaults" src/Parcl.Core/Config/ParclSettings.cs; then
+            echo "::error::Settings must reject tampered files when HMAC verification fails"
+            exit 1
+          fi
+          echo "HMAC enforcement found in ParclSettings.Load()"
+
+      - name: Verify UseNativeSmime default
+        shell: bash
+        run: |
+          echo "=== Checking UseNativeSmime default ==="
+          DEFAULT=$(grep -o 'UseNativeSmime.*=.*\(true\|false\)' src/Parcl.Core/Config/ParclSettings.cs | head -1)
+          echo "Current default: $DEFAULT"
+          if echo "$DEFAULT" | grep -q "false"; then
+            echo "::warning::UseNativeSmime defaults to false (Parcl envelope mode)"
+            echo "This means recipients need Parcl installed to decrypt"
+          fi
+
+  settings-default-regression:
+    name: Settings Default Regression Check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        run: |
+          dotnet restore tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj
+          dotnet build tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore
+
+      - name: Run settings default tests
+        run: |
+          dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName~ParclSettingsTests"
