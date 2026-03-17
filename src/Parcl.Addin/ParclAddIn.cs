@@ -113,9 +113,6 @@ namespace Parcl.Addin
                 // Hook new mail for inbox icon classification
                 _application.NewMailEx += Application_NewMailEx;
 
-                // Register Parcl categories with custom colors
-                RegisterParclCategories();
-
                 Logger.Debug("AddIn", "Ribbon selection tracking enabled");
 
                 Logger.Info("AddIn", "Parcl add-in started successfully");
@@ -171,45 +168,13 @@ namespace Parcl.Addin
             catch (Exception ex) { Logger?.Debug("Ribbon", $"Invalidate failed on FolderSwitch: {ex.Message}"); }
         }
 
-        private void RegisterParclCategories()
-        {
-            try
-            {
-                var categories = _application!.Session.Categories;
-                var parclCats = new[]
-                {
-                    ("Parcl: Encrypted", Outlook.OlCategoryColor.olCategoryColorDarkBlue),
-                    ("Parcl: Signed", Outlook.OlCategoryColor.olCategoryColorDarkGreen),
-                    ("Parcl: Signed+Encrypted", Outlook.OlCategoryColor.olCategoryColorDarkPurple)
-                };
-
-                foreach (var (name, color) in parclCats)
-                {
-                    bool exists = false;
-                    foreach (Outlook.Category cat in categories)
-                    {
-                        if (cat.Name == name) { exists = true; break; }
-                    }
-
-                    if (!exists)
-                    {
-                        categories.Add(name, color);
-                        Logger.Debug("Icons", $"Registered category: {name}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger?.Debug("Icons", $"Category registration failed: {ex.Message}");
-            }
-        }
-
-        // ── Inbox icon + category classification ─────────────────────────
+        // ── Inbox icon classification ─────────────────────────────────────
         private const string PR_ICON_INDEX = "http://schemas.microsoft.com/mapi/proptag/0x10800003";
-        // Best-rendering icon indices (verified in Outlook 16.x dark theme)
-        private const int ICON_ENCRYPTED = 307;       // padlock with gold seal
-        private const int ICON_SIGNED = 306;           // padlock
-        private const int ICON_SIGNED_ENCRYPTED = 308; // padlock variant
+        // Icon indices matching what Outlook natively assigns to S/MIME messages
+        // (verified from James/Dean's natively encrypted/signed messages)
+        private const int ICON_ENCRYPTED = 275;        // padlock (Outlook native encrypted)
+        private const int ICON_SIGNED = 276;            // ribbon/seal (Outlook native signed)
+        private const int ICON_SIGNED_ENCRYPTED = 275;  // padlock (Outlook native enc+sign)
 
         private void Application_NewMailEx(string entryIDCollection)
         {
@@ -277,16 +242,6 @@ namespace Parcl.Addin
                               : ICON_SIGNED;
 
                 mail.PropertyAccessor.SetProperty(PR_ICON_INDEX, iconIndex);
-
-                // Set a Parcl category for visual identification in message list
-                string category = isEncrypted && isSigned ? "Parcl: Signed+Encrypted"
-                                : isEncrypted ? "Parcl: Encrypted"
-                                : "Parcl: Signed";
-
-                var existing = mail.Categories ?? "";
-                if (!existing.Contains("Parcl:"))
-                    mail.Categories = string.IsNullOrEmpty(existing) ? category : existing + ", " + category;
-
                 mail.Save();
 
                 Logger?.Debug("Icons",
