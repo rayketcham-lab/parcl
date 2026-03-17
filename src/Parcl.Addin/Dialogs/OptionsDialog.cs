@@ -45,6 +45,13 @@ namespace Parcl.Addin.Dialogs
         private NumericUpDown _cacheHours = null!;
         private NumericUpDown _maxCache = null!;
 
+        private readonly ToolTip _tips = new ToolTip
+        {
+            AutoPopDelay = 10000,
+            InitialDelay = 300,
+            ReshowDelay = 200
+        };
+
         public OptionsDialog()
         {
             _settings = ParclSettings.Load();
@@ -170,92 +177,147 @@ namespace Parcl.Addin.Dialogs
         private TabPage CreateCryptoTab()
         {
             var tab = new TabPage("Cryptography");
-            var panel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                ColumnCount = 2,
-                RowCount = 12,
-                Height = 420,
-                Padding = new Padding(12)
-            };
+            tab.Padding = new Padding(12, 8, 12, 8);
 
+            var container = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            int y = 4;
+
+            // ── Encryption Mode ──
             _useNativeSmime = new CheckBox
             {
                 Text = "Use native Outlook S/MIME (compatible with Entrust, etc.)",
-                AutoSize = true
+                Location = new Point(8, y),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9)
             };
+            container.Controls.Add(_useNativeSmime);
+            y += 24;
 
             var nativeHint = new Label
             {
-                Text = "Native mode lets any S/MIME client decrypt. Parcl mode adds protected headers but requires Parcl.",
-                ForeColor = System.Drawing.Color.Gray,
-                Font = new System.Drawing.Font("Segoe UI", 8),
-                AutoSize = true
+                Text = "Native: any S/MIME client can decrypt.  Parcl mode: adds protected headers but requires Parcl.",
+                Location = new Point(26, y),
+                Size = new Size(510, 16),
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 7.5f)
             };
+            container.Controls.Add(nativeHint);
+            y += 26;
 
-            // Separator between native S/MIME and algorithm dropdowns
-            var cryptoSeparator = new Label
-            {
-                BorderStyle = BorderStyle.Fixed3D,
-                Height = 2,
-                Dock = DockStyle.Top,
-                Margin = new Padding(0, 6, 0, 6)
-            };
+            // ── Separator ──
+            var sep1 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep1);
+            y += 12;
 
-            _encAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            // ── Algorithms ──
+            var algoLabel = new Label { Text = "Algorithms", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(algoLabel);
+            y += 22;
+
+            AddOptionRow(container, ref y, "Encryption:", out _encAlgo);
             _encAlgo.Items.AddRange(new object[] { "AES-128-CBC", "AES-192-CBC", "AES-256-CBC", "AES-128-GCM", "AES-256-GCM" });
 
-            _hashAlgo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            AddOptionRow(container, ref y, "Hash:", out _hashAlgo);
             _hashAlgo.Items.AddRange(new object[] { "SHA-256", "SHA-384", "SHA-512" });
 
-            _certValidation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _certValidation.Items.AddRange(new object[] { "None", "Relaxed", "Strict" });
+            AddOptionRow(container, ref y, "Cert Validation:", out _certValidation);
+            _certValidation.Items.AddRange(new object[] { "None (expiry only)", "Relaxed (chain, no revocation)", "Strict (chain + OCSP/CRL)" });
 
-            _alwaysSign = new CheckBox { Text = "Always sign outgoing messages" };
-            _alwaysEncrypt = new CheckBox { Text = "Always encrypt outgoing messages" };
+            y += 8;
+            var sep2 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep2);
+            y += 12;
 
-            _opaqueSign = new CheckBox
-            {
-                Text = "Use opaque signing (content inside signature)",
-                AutoSize = true
-            };
+            // ── Signing ──
+            var signLabel = new Label { Text = "Signing", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(signLabel);
+            y += 22;
+
+            _alwaysSign = new CheckBox { Text = "Always sign outgoing messages", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_alwaysSign);
+            y += 24;
+
+            _opaqueSign = new CheckBox { Text = "Use opaque signing (content inside signature)", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_opaqueSign);
+            y += 22;
 
             var opaqueHint = new Label
             {
-                Text = "Clear-signed (default): content readable without verification. Opaque: content embedded in signature blob.",
-                ForeColor = System.Drawing.Color.Gray,
-                Font = new System.Drawing.Font("Segoe UI", 8),
-                AutoSize = true
+                Text = "Clear-signed (default): readable without verification.  Opaque: content embedded in signature.",
+                Location = new Point(26, y), Size = new Size(510, 16),
+                ForeColor = Color.Gray, Font = new Font("Segoe UI", 7.5f)
             };
+            container.Controls.Add(opaqueHint);
+            y += 22;
 
-            _includeCertChain = new CheckBox
-            {
-                Text = "Include certificate chain in signatures",
-                AutoSize = true
-            };
+            _includeCertChain = new CheckBox { Text = "Include certificate chain in signatures", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_includeCertChain);
+            y += 30;
 
-            panel.Controls.Add(_useNativeSmime, 0, 0);
-            panel.SetColumnSpan(_useNativeSmime, 2);
-            panel.Controls.Add(nativeHint, 0, 1);
-            panel.SetColumnSpan(nativeHint, 2);
-            panel.Controls.Add(cryptoSeparator, 0, 2);
-            panel.SetColumnSpan(cryptoSeparator, 2);
-            AddRow(panel, 3, "Encryption Algorithm:", _encAlgo);
-            AddRow(panel, 4, "Hash Algorithm:", _hashAlgo);
-            AddRow(panel, 5, "Certificate Validation:", _certValidation);
-            panel.Controls.Add(_alwaysSign, 0, 6);
-            panel.SetColumnSpan(_alwaysSign, 2);
-            panel.Controls.Add(_alwaysEncrypt, 0, 7);
-            panel.SetColumnSpan(_alwaysEncrypt, 2);
-            panel.Controls.Add(_opaqueSign, 0, 8);
-            panel.SetColumnSpan(_opaqueSign, 2);
-            panel.Controls.Add(opaqueHint, 0, 9);
-            panel.SetColumnSpan(opaqueHint, 2);
-            panel.Controls.Add(_includeCertChain, 0, 10);
-            panel.SetColumnSpan(_includeCertChain, 2);
+            // ── Encryption ──
+            var sep3 = new Label { BorderStyle = BorderStyle.Fixed3D, Location = new Point(8, y), Size = new Size(530, 2) };
+            container.Controls.Add(sep3);
+            y += 12;
 
-            tab.Controls.Add(panel);
+            var encLabel = new Label { Text = "Encryption", Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(8, y), AutoSize = true };
+            container.Controls.Add(encLabel);
+            y += 22;
+
+            _alwaysEncrypt = new CheckBox { Text = "Always encrypt outgoing messages", Location = new Point(8, y), AutoSize = true, Font = new Font("Segoe UI", 9) };
+            container.Controls.Add(_alwaysEncrypt);
+
+            // ── Tooltips ──
+            _tips.SetToolTip(_useNativeSmime,
+                "ON (recommended): Outlook handles S/MIME encryption. Works with Entrust, native Outlook, Thunderbird.\n" +
+                "OFF: Parcl builds its own CMS envelope with RFC 7508 protected headers. Requires Parcl on both ends.");
+            _tips.SetToolTip(_encAlgo,
+                "AES-256-CBC: FIPS approved, widest compatibility (recommended).\n" +
+                "AES-256-GCM: Authenticated encryption, stronger but requires modern clients.\n" +
+                "AES-128-*: Acceptable for FIPS but 256-bit preferred for sensitive data.");
+            _tips.SetToolTip(_hashAlgo,
+                "SHA-256: FIPS approved, standard for S/MIME signatures (recommended).\n" +
+                "SHA-384/SHA-512: Stronger digest, use with RSA-3072+ or ECDSA keys.");
+            _tips.SetToolTip(_certValidation,
+                "None: Only checks certificate expiry dates. For testing/self-signed certs.\n" +
+                "Relaxed: Validates certificate chain but skips revocation checks. For internal CAs.\n" +
+                "Strict: Full chain validation with OCSP/CRL revocation. FIPS best practice.");
+            _tips.SetToolTip(_alwaysSign,
+                "Automatically sign every outgoing message with your signing certificate.\n" +
+                "Recipients can verify your identity and that the message was not tampered with.");
+            _tips.SetToolTip(_alwaysEncrypt,
+                "Automatically encrypt every outgoing message. Send will be blocked if\n" +
+                "a recipient does not have a valid encryption certificate.");
+            _tips.SetToolTip(_opaqueSign,
+                "Clear-signed (default): Message body is readable even without S/MIME verification.\n" +
+                "Opaque: Message body is embedded inside the signature — requires S/MIME to read.");
+            _tips.SetToolTip(_includeCertChain,
+                "Include your full certificate chain (root + intermediate CAs) in signatures.\n" +
+                "Helps recipients verify your signature without having your CA certs installed.");
+
+            tab.Controls.Add(container);
             return tab;
+        }
+
+        private static void AddOptionRow(Panel container, ref int y, string label, out ComboBox combo)
+        {
+            var lbl = new Label
+            {
+                Text = label,
+                Location = new Point(24, y + 3),
+                Size = new Size(120, 20),
+                Font = new Font("Segoe UI", 9),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            combo = new ComboBox
+            {
+                Location = new Point(150, y),
+                Size = new Size(280, 24),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9)
+            };
+            container.Controls.Add(lbl);
+            container.Controls.Add(combo);
+            y += 30;
         }
 
         private TabPage CreateBehaviorTab()
