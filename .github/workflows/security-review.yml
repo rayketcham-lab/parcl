@@ -1,0 +1,138 @@
+name: Security Review
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'   # Daily at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  org-guard:
+    name: Verify Repository Organization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure repo is under rayketcham-lab
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO_OWNER" != "rayketcham-lab" ]; then
+            echo "::error::Repository must be under 'rayketcham-lab', not '$REPO_OWNER'"
+            exit 1
+          fi
+          echo "Repo is correctly under rayketcham-lab"
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Parcl.sln
+
+      - name: Check for vulnerable packages
+        run: |
+          $output = dotnet list Parcl.sln package --vulnerable --include-transitive
+          Write-Output $output
+          if ($output -match "has the following vulnerable packages") {
+            Write-Error "Vulnerable packages detected"
+            exit 1
+          }
+          Write-Output "No vulnerable packages found"
+        shell: pwsh
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets in source
+        run: |
+          set -euo pipefail
+          echo "Scanning for potential secrets..."
+          FOUND=0
+          for pattern in \
+            "password\s*=\s*[\"'][^\"']+[\"']" \
+            "api[_-]?key\s*=\s*[\"'][^\"']+[\"']" \
+            "secret\s*=\s*[\"'][^\"']+[\"']" \
+            "BEGIN RSA PRIVATE KEY" \
+            "BEGIN EC PRIVATE KEY" \
+            "BEGIN PRIVATE KEY" \
+            "AKIA[0-9A-Z]{16}" \
+            "ghp_[a-zA-Z0-9]{36}" \
+            "-----BEGIN CERTIFICATE-----" \
+          ; do
+            MATCHES=$(git grep -l -i -E "$pattern" -- '*.cs' '*.json' '*.yml' '*.yaml' '*.xml' '*.config' 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              REAL=$(echo "$MATCHES" | grep -v -E "(Test|test|\.example|CredentialProtector|CertExchange|MimeBuilder)" || true)
+              if [ -n "$REAL" ]; then
+                echo "::warning::Potential secret pattern '$pattern' found in: $REAL"
+                FOUND=$((FOUND + 1))
+              fi
+            fi
+          done
+          if [ "$FOUND" -gt 0 ]; then
+            echo "::warning::$FOUND potential secret pattern(s) found — review above"
+          else
+            echo "No secrets detected"
+          fi
+
+  encryption-audit:
+    name: Encryption & HMAC Audit
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build tests
+        run: |
+          dotnet restore tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj
+          dotnet build tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore
+
+      - name: Run security-critical tests
+        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision|FullyQualifiedName~Settings"
+
+      - name: Verify SendDecision used in ItemSend
+        shell: bash
+        run: |
+          grep -q "SendDecision.Evaluate" src/Parcl.Addin/ParclAddIn.cs || { echo "::error::ItemSend must use SendDecision.Evaluate"; exit 1; }
+          echo "SendDecision.Evaluate confirmed"
+
+      - name: Verify fail-closed on encryption error
+        shell: bash
+        run: |
+          grep -q "cancel = true" src/Parcl.Addin/ParclAddIn.cs || { echo "::error::ItemSend must set cancel=true on encryption failure"; exit 1; }
+          echo "Fail-closed confirmed"
+
+      - name: Verify HMAC integrity on settings load
+        shell: bash
+        run: |
+          grep -q "VerifyHmac\|SettingsIntegrity" src/Parcl.Core/Config/ParclSettings.cs || { echo "::error::Settings must verify HMAC on load"; exit 1; }
+          echo "HMAC integrity confirmed"
+
+      - name: Verify no weak algorithms (3DES / SHA-1)
+        shell: bash
+        run: |
+          if grep -rn "3DES\|TripleDES\|SHA1\b\|sha1\b" src/Parcl.Core/Crypto/ --include="*.cs" | grep -v "//.*SHA1\|//.*3DES"; then
+            echo "::error::Weak algorithm reference found in crypto code"
+            exit 1
+          fi
+          echo "No weak algorithm references found"

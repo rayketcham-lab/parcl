@@ -3,12 +3,13 @@
 **S/MIME Encryption & Certificate Management for Microsoft Outlook**
 
 [![CI](https://github.com/rayketcham-lab/parcl/actions/workflows/ci.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/ci.yml)
-[![Security](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/security.yml)
+[![Daily](https://github.com/rayketcham-lab/parcl/actions/workflows/daily.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/daily.yml)
+[![Security Review](https://github.com/rayketcham-lab/parcl/actions/workflows/security-review.yml/badge.svg)](https://github.com/rayketcham-lab/parcl/actions/workflows/security-review.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 Parcl is a Microsoft Outlook COM add-in that brings end-to-end S/MIME email encryption, digital signatures, and certificate management directly into the Outlook ribbon. Encrypted messages display inline in the reading pane — no `.p7m` attachments, no external tools, no server-side configuration.
 
-**v0.9.3-beta** — Proof of Concept
+**v0.10.2** — Stable Release
 
 [Homepage](https://rayketcham-lab.github.io/parcl/) | [Releases](https://github.com/rayketcham-lab/parcl/releases) | [Issues](https://github.com/rayketcham-lab/parcl/issues) | [quantumnexum.com](https://quantumnexum.com) | Support: help@quantumnexum.com
 
@@ -178,11 +179,16 @@ dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Relea
 
 ## CI/CD
 
-| Workflow | Purpose |
-|----------|---------|
-| **CI** | Build, test, lint, upload MSI artifact |
-| **Security** | Dependency vulnerability scan, secret detection, code analysis |
-| **PII Scan** | Verify no personally identifiable information leaks into logs or output |
+| Workflow | Schedule | Purpose |
+|----------|----------|---------|
+| **CI** | push / PR | Build, test, lint, upload MSI artifact |
+| **Daily** | daily 07:00 UTC | Full build + test + MSI artifact retention |
+| **Security Review** | daily 06:00 UTC + push/PR | Dependency scan, secret detection, encryption audit, HMAC checks |
+| **Security** | push / PR | Dependency vulnerability scan, secret detection, code analysis |
+| **PII Scan** | push / PR | Verify no PII leaks into logs or output |
+| **Encryption Enforcement** | push / PR | Static checks that encryption/signing code meets policy |
+| **Traceability** | push / PR | Commit-to-issue traceability enforcement |
+| **Pages** | push (main) | Deploy GitHub Pages documentation site |
 
 ---
 

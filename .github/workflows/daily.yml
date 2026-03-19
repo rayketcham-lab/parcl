@@ -1,0 +1,50 @@
+name: Daily
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # Daily at 07:00 UTC
+  workflow_dispatch:
+
+jobs:
+  org-guard:
+    name: Verify Repository Organization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure repo is under rayketcham-lab
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO_OWNER" != "rayketcham-lab" ]; then
+            echo "::error::Repository must be under 'rayketcham-lab', not '$REPO_OWNER'"
+            exit 1
+          fi
+          echo "Repo is correctly under rayketcham-lab"
+
+  build-and-test:
+    name: Build and Test
+    runs-on: windows-latest
+    needs: org-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Parcl.sln
+
+      - name: Build
+        run: dotnet build Parcl.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parcl-daily-msi
+          path: src/Parcl.Installer/bin/Release/Parcl.Installer.msi
+          if-no-files-found: warn
+          retention-days: 7
