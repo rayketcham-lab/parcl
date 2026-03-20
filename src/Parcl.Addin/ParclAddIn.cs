@@ -491,32 +491,55 @@ namespace Parcl.Addin
                                 continue;
                             }
 
-                            // Publish cert to AddressEntry so Outlook can find it natively.
-                            // We trust ANY cert that Parcl resolved for the recipient — the cert
-                            // email may differ from the SMTP address (enterprise Exchange/AD scenarios
-                            // where the cert has an internal email like user@adxuser.com but the
-                            // SMTP address is user@company.com). Outlook's native engine can use
-                            // the cert once it's published to the AddressEntry.
+                            // Check if the cert email matches the SMTP address.
+                            // Outlook's native engine requires an email match to find the cert.
+                            // If mismatched, fall back to Parcl envelope (which uses the cert
+                            // directly without email matching).
                             var certEmail = Parcl.Core.Models.CertificateInfo.FromX509(cert).Email;
-                            try
-                            {
-                                var addrEntry = recipient.AddressEntry;
-                                if (addrEntry != null)
-                                {
-                                    var certBytes = cert.Export(
-                                        System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
-                                    addrEntry.PropertyAccessor.SetProperty(
-                                        PR_USER_X509_CERT,
-                                        new object[] { certBytes });
-                                }
-                            }
-                            catch { }
+                            bool certMatchesSmtp = false;
 
-                            Logger.Info("Send",
-                                $"Native compatible: {ParclLogger.SanitizeEmail(smtpAddr)}" +
-                                (certEmail != null && !certEmail.Equals(smtpAddr, StringComparison.OrdinalIgnoreCase)
-                                    ? $" (cert email: {ParclLogger.SanitizeEmail(certEmail)})"
-                                    : ""));
+                            if (!string.IsNullOrEmpty(certEmail) &&
+                                certEmail.Equals(smtpAddr, StringComparison.OrdinalIgnoreCase))
+                            {
+                                certMatchesSmtp = true;
+                            }
+
+                            // Also check if Subject contains the email
+                            if (!certMatchesSmtp && cert.Subject != null &&
+                                cert.Subject.ToLowerInvariant().Contains(smtpAddr.ToLowerInvariant()))
+                            {
+                                certMatchesSmtp = true;
+                            }
+
+                            if (certMatchesSmtp)
+                            {
+                                // Publish cert to AddressEntry for Outlook's native engine
+                                try
+                                {
+                                    var addrEntry = recipient.AddressEntry;
+                                    if (addrEntry != null)
+                                    {
+                                        var certBytes = cert.Export(
+                                            System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
+                                        addrEntry.PropertyAccessor.SetProperty(
+                                            PR_USER_X509_CERT,
+                                            new object[] { certBytes });
+                                    }
+                                }
+                                catch { }
+
+                                Logger.Info("Send",
+                                    $"Native compatible: {ParclLogger.SanitizeEmail(smtpAddr)}");
+                            }
+                            else
+                            {
+                                // Cert email doesn't match SMTP — Outlook native can't use it.
+                                // Fall back to Parcl envelope which encrypts directly with the cert.
+                                Logger.Info("Send",
+                                    $"Cert mismatch for {ParclLogger.SanitizeEmail(smtpAddr)} " +
+                                    $"(cert={ParclLogger.SanitizeEmail(certEmail ?? "none")}) — will use Parcl envelope");
+                                allNativeCompatible = false;
+                            }
                         }
 
                         if (!allNativeCompatible)
