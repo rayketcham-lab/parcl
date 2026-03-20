@@ -207,7 +207,8 @@ namespace Parcl.Core.Tests
 
             // Step 3: Decrypt
             var decryptResult = _smime.Decrypt(encrypted);
-            var decryptedSigned = decryptResult.Content;
+            Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+            var decryptedSigned = decryptResult.Content!;
 
             // Step 4: Verify signature
             var result = _smime.Verify(decryptedSigned);
@@ -250,7 +251,8 @@ namespace Parcl.Core.Tests
 
                 // Reverse: decrypt then verify
                 var decryptResult = _smime.Decrypt(payload);
-                var decrypted = decryptResult.Content;
+                Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+                var decrypted = decryptResult.Content!;
                 var result = _smime.Verify(decrypted);
                 Assert.True(result.IsValid);
                 Assert.Equal(body, result.Content);
@@ -396,7 +398,8 @@ namespace Parcl.Core.Tests
             var signed = _smime.Sign(mime, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
             var decryptResult = _smime.Decrypt(encrypted);
-            var decryptedSigned = decryptResult.Content;
+            Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+            var decryptedSigned = decryptResult.Content!;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -415,7 +418,8 @@ namespace Parcl.Core.Tests
             var signed = _smime.Sign(html, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
             var decryptResult = _smime.Decrypt(encrypted);
-            var decryptedSigned = decryptResult.Content;
+            Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+            var decryptedSigned = decryptResult.Content!;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -444,7 +448,8 @@ namespace Parcl.Core.Tests
             var signed = _smime.Sign(mime, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
             var decryptResult = _smime.Decrypt(encrypted);
-            var decryptedSigned = decryptResult.Content;
+            Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+            var decryptedSigned = decryptResult.Content!;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -524,13 +529,17 @@ namespace Parcl.Core.Tests
 
             // Reverse
             if (alwaysEncrypt)
-                payload = _smime.Decrypt(payload).Content;
+            {
+                var decryptResult = _smime.Decrypt(payload);
+                Assert.True(decryptResult.Success, decryptResult.ErrorMessage);
+                payload = decryptResult.Content!;
+            }
 
             if (alwaysSign)
             {
                 var result = _smime.Verify(payload);
                 Assert.True(result.IsValid, $"Failed for {encAlgo}/{hashAlgo}: {result.ErrorMessage}");
-                payload = result.Content;
+                payload = result.Content!;
             }
 
             Assert.Equal(body, payload);

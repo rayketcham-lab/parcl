@@ -51,11 +51,17 @@ namespace Parcl.Core.Models
                 if (ext.Oid?.Value == "2.5.29.17") // Subject Alternative Name
                 {
                     var san = ext.Format(false);
-                    if (san.Contains("RFC822"))
+                    // Parse RFC822 Name from SAN string which may contain multiple entries, e.g.:
+                    // "Other Name:Principal Name=E21127560@adxuser.com, RFC822 Name=james@rtx.com"
+                    // Must find the "RFC822 Name=" prefix and extract its value specifically.
+                    var rfc822Prefix = "RFC822 Name=";
+                    var idx = san.IndexOf(rfc822Prefix, StringComparison.OrdinalIgnoreCase);
+                    if (idx >= 0)
                     {
-                        var parts = san.Split('=');
-                        if (parts.Length > 1)
-                            email = parts[1].Trim().Split(',')[0];
+                        var value = san.Substring(idx + rfc822Prefix.Length);
+                        // Trim at the next SAN entry separator (", " followed by a field name)
+                        var commaIdx = value.IndexOf(',');
+                        email = commaIdx >= 0 ? value.Substring(0, commaIdx).Trim() : value.Trim();
                     }
                 }
             }

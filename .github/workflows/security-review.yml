@@ -131,7 +131,7 @@ jobs:
       - name: Verify no weak algorithms (3DES / SHA-1)
         shell: bash
         run: |
-          if grep -rn "3DES\|TripleDES\|SHA1\b\|sha1\b" src/Parcl.Core/Crypto/ --include="*.cs" | grep -v "//.*SHA1\|//.*3DES"; then
+          if grep -rn "3DES\|TripleDES\|SHA1\b\|sha1\b" src/Parcl.Core/Crypto/ --include="*.cs" | grep -v -i -E "(nosec|//.*sha1|//.*3des|//.*tripledes)"; then
             echo "::error::Weak algorithm reference found in crypto code"
             exit 1
           fi

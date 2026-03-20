@@ -38,7 +38,7 @@ namespace Parcl.Core.Crypto
         private static readonly System.Collections.Generic.HashSet<string> BlockedHashAlgorithms =
             new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "MD2", "MD4", "MD5", "SHA-1", "SHA1",
+                "MD2", "MD4", "MD5", "SHA-1", "SHA1", // nosec: blocklist definition
                 // OIDs for blocked hash algorithms
                 "1.2.840.113549.2.2",   // MD2
                 "1.2.840.113549.2.4",   // MD4
@@ -50,7 +50,7 @@ namespace Parcl.Core.Crypto
         private static readonly System.Collections.Generic.HashSet<string> BlockedEncryptionAlgorithms =
             new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "DES", "DES-CBC", "3DES", "3DES-CBC", "RC2", "RC2-CBC", "RC4",
+                "DES", "DES-CBC", "3DES", "3DES-CBC", "RC2", "RC2-CBC", "RC4", // nosec: blocklist definition
                 // OIDs for blocked encryption algorithms
                 "1.3.14.3.2.7",         // DES-CBC
                 "1.2.840.113549.3.7",   // 3DES-CBC
