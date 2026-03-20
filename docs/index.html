@@ -935,6 +935,7 @@ footer a:hover { color: var(--text); }
       <a href="#security">Security</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#architecture">Architecture</a>
+      <a href="#enterprise">Enterprise</a>
       <a href="https://github.com/rayketcham-lab/parcl" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.8rem;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -951,7 +952,7 @@ footer a:hover { color: var(--text); }
 
   <div class="hero-badge">
     <span class="pulse"></span>
-    v0.10.0-rc1 &middot; Open Source &middot; Apache 2.0 License
+    v0.10.2 &middot; Open Source &middot; Apache 2.0 License
   </div>
 
   <h1>
@@ -982,7 +983,7 @@ footer a:hover { color: var(--text); }
       <div class="stat-label">Reading Pane Encryption</div>
     </div>
     <div class="stat">
-      <div class="stat-value">28</div>
+      <div class="stat-value">183+</div>
       <div class="stat-label">Tests Passing</div>
     </div>
     <div class="stat">
@@ -1346,6 +1347,77 @@ footer a:hover { color: var(--text); }
       </div>
       <h3>RFC 4515 Injection Prevention</h3>
       <p>All LDAP filter inputs are sanitized to prevent injection attacks against directory services.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- Enterprise Deployment -->
+<section class="section fade-up" id="enterprise">
+  <div class="section-label">Enterprise</div>
+  <h2>Enterprise deployment guide</h2>
+  <p>Everything IT teams need to deploy Parcl across managed Windows desktops.</p>
+
+  <div class="features-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="feature-card">
+      <div class="feature-icon blue">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent-light)" stroke-width="1.5"><path d="M10 2l6 3v5c0 4-3 7-6 8-3-1-6-4-6-8V5l6-3z"/></svg>
+      </div>
+      <h3>Code Signing</h3>
+      <p>All assemblies are <strong>strong-named</strong> (PublicKeyToken: <code style="font-family:var(--mono);font-size:0.8em;background:rgba(99,102,241,0.1);padding:2px 6px;border-radius:4px;">0dbfe1478aff99e5</code>). For enterprise environments with WDAC, AppLocker, or SmartScreen policies, the MSI and DLLs should be <strong>Authenticode signed</strong> with your organization's code signing certificate before deployment.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon cyan">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--cyan)" stroke-width="1.5"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>
+      </div>
+      <h3>Authenticode Signing</h3>
+      <p>The build pipeline supports automated signing. Set the <code style="font-family:var(--mono);font-size:0.8em;background:rgba(99,102,241,0.1);padding:2px 6px;border-radius:4px;">SIGN_CERT_THUMBPRINT</code> environment variable in your CI/CD pipeline and build in Release mode. Parcl uses Sectigo's timestamp server for long-term signature validity.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon green">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M5 10l3 3 7-7"/><circle cx="10" cy="10" r="8"/></svg>
+      </div>
+      <h3>Group Policy</h3>
+      <p>Parcl registers as a COM add-in under <code style="font-family:var(--mono);font-size:0.8em;background:rgba(99,102,241,0.1);padding:2px 6px;border-radius:4px;">HKCU</code> &mdash; no HKLM admin writes needed. The MSI installer sets <code style="font-family:var(--mono);font-size:0.8em;background:rgba(99,102,241,0.1);padding:2px 6px;border-radius:4px;">DoNotDisableAddinList</code> to prevent Outlook from auto-disabling. Compatible with Outlook's <em>RequireAddinSigning</em> Group Policy when Authenticode signed.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon blue">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent-light)" stroke-width="1.5"><rect x="3" y="8" width="14" height="9" rx="2"/><path d="M6 8V5a4 4 0 018 0v3"/></svg>
+      </div>
+      <h3>FIPS 140-2 Compliance</h3>
+      <p>All cryptographic operations use Windows CNG providers. When FIPS mode is enabled system-wide, Parcl automatically uses FIPS-validated algorithms. Recommended baseline: <strong>AES-256-CBC</strong> encryption, <strong>SHA-256</strong> signing, <strong>Strict</strong> certificate validation.</p>
+    </div>
+  </div>
+
+  <div class="terminal" style="margin-top: 2.5rem;">
+    <div class="terminal-header">
+      <span class="terminal-dot red"></span>
+      <span class="terminal-dot yellow"></span>
+      <span class="terminal-dot green"></span>
+      <span class="terminal-title">Enterprise Signing &amp; Deployment</span>
+    </div>
+    <div class="terminal-body">
+<span class="t-comment"># Build in Release mode (strong-named automatically)</span>
+<span class="t-prompt">&gt;</span> <span class="t-cmd">dotnet build</span> <span class="t-flag">Parcl.sln -c Release</span>
+
+<span class="t-comment"># Sign the DLLs and MSI with your code signing certificate</span>
+<span class="t-prompt">&gt;</span> <span class="t-cmd">signtool sign</span> <span class="t-flag">/sha1</span> <span class="t-string">YOUR_CERT_THUMBPRINT</span> <span class="t-flag">/tr</span> <span class="t-string">http://timestamp.sectigo.com</span> <span class="t-flag">/td sha256 /fd sha256</span>
+  <span class="t-output">src\Parcl.Addin\bin\Release\net48\Parcl.Addin.dll</span>
+  <span class="t-output">src\Parcl.Core\bin\Release\net48\Parcl.Core.dll</span>
+  <span class="t-output">src\Parcl.Installer\bin\Release\Parcl.Installer.msi</span>
+
+<span class="t-comment"># Or automate in CI — set SIGN_CERT_THUMBPRINT env var</span>
+<span class="t-prompt">&gt;</span> <span class="t-cmd">dotnet build</span> <span class="t-flag">-c Release</span> <span class="t-comment"># signtool runs automatically via Directory.Build.props</span>
+
+<span class="t-comment"># Deploy via SCCM / Intune / GPO</span>
+<span class="t-prompt">&gt;</span> <span class="t-cmd">msiexec /i</span> <span class="t-string">Parcl.Installer.msi</span> <span class="t-flag">/qn</span>
+<span class="t-success">  &#10003; Per-user install &mdash; no admin required</span>
+<span class="t-success">  &#10003; COM registered under HKCU</span>
+<span class="t-success">  &#10003; Outlook loads add-in on next launch</span>
     </div>
   </div>
 </section>

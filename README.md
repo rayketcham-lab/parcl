@@ -177,6 +177,49 @@ dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Relea
 
 ---
 
+## Enterprise Deployment
+
+### Code Signing
+
+All Parcl assemblies are **strong-named** with PublicKeyToken `0dbfe1478aff99e5`. For enterprise environments with WDAC, AppLocker, or SmartScreen policies, sign the binaries with your organization's Authenticode code signing certificate:
+
+```powershell
+# Sign DLLs and MSI after building in Release mode
+signtool sign /sha1 YOUR_CERT_THUMBPRINT /tr http://timestamp.sectigo.com /td sha256 /fd sha256 `
+    src\Parcl.Addin\bin\Release\net48\Parcl.Addin.dll `
+    src\Parcl.Core\bin\Release\net48\Parcl.Core.dll `
+    src\Parcl.Installer\bin\Release\Parcl.Installer.msi
+```
+
+Or automate in CI by setting the `SIGN_CERT_THUMBPRINT` environment variable — the `Directory.Build.props` `AuthenticodeSign` target runs `signtool` automatically in Release builds.
+
+### Files That Must Be Signed
+
+| File | Why |
+|---|---|
+| `Parcl.Addin.dll` | COM add-in loaded by Outlook — blocked by Group Policy `RequireAddinSigning` if unsigned |
+| `Parcl.Core.dll` | Referenced by the add-in — must match strong name |
+| `Parcl.Installer.msi` | Installer — blocked by SmartScreen/WDAC if unsigned |
+
+### Group Policy Compatibility
+
+- Per-user install: all registry under `HKCU`, no `HKLM` writes, no admin required
+- `DoNotDisableAddinList` set automatically by the MSI installer
+- Compatible with Outlook's `RequireAddinSigning` policy when Authenticode signed
+- Deploy via SCCM, Intune, or GPO: `msiexec /i Parcl.Installer.msi /qn`
+
+### FIPS 140-2 Recommended Baseline
+
+| Setting | Value | Standard |
+|---|---|---|
+| Encryption | AES-256-CBC | FIPS 197, NIST SP 800-38A |
+| Signing Hash | SHA-256 | FIPS 180-4 |
+| Validation | Strict (chain + OCSP/CRL) | NIST SP 800-52 |
+| AlwaysSign | Enabled | Best practice |
+| UseNativeSmime | true | RFC 5751 interop |
+
+---
+
 ## CI/CD
 
 | Workflow | Schedule | Purpose |
