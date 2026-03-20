@@ -88,7 +88,8 @@ namespace Parcl.Core.Tests
                 var encryptedStr = Encoding.UTF8.GetString(encrypted);
                 Assert.DoesNotContain(plaintextStr, encryptedStr);
 
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
             }
             finally
@@ -132,7 +133,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(signed, recipientCerts);
 
                 // Decrypt
-                var decryptedSigned = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decryptedSigned = decryptResult.Content;
 
                 // Verify (skip chain validation for self-signed test certs)
                 var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();

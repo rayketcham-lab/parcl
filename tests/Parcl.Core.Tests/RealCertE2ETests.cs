@@ -181,7 +181,8 @@ namespace Parcl.Core.Tests
 
             var recipientCerts = new X509Certificate2Collection { _userCert };
             var encrypted = _smime.Encrypt(body, recipientCerts);
-            var decrypted = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decrypted = decryptResult.Content;
 
             Assert.Equal(body, decrypted);
             Assert.Equal("Default AES-256 encrypted message.",
@@ -207,7 +208,8 @@ namespace Parcl.Core.Tests
             var encrypted = _smime.Encrypt(signed, recipientCerts);
 
             // Step 3: Decrypt
-            var decryptedSigned = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decryptedSigned = decryptResult.Content;
 
             // Step 4: Verify signature
             var result = _smime.Verify(decryptedSigned);
@@ -249,7 +251,8 @@ namespace Parcl.Core.Tests
                 }
 
                 // Reverse: decrypt then verify
-                var decrypted = _smime.Decrypt(payload);
+                var decryptResult = _smime.Decrypt(payload);
+                var decrypted = decryptResult.Content;
                 var result = _smime.Verify(decrypted);
                 Assert.True(result.IsValid);
                 Assert.Equal(body, result.Content);
@@ -274,9 +277,10 @@ namespace Parcl.Core.Tests
             var encrypted = _smime.Encrypt(body, new X509Certificate2Collection { _userCert });
 
             // Ensure body is not readable
-            Assert.False(Encoding.UTF8.GetString(encrypted).Contains("Confidential"));
+            Assert.DoesNotContain("Confidential", Encoding.UTF8.GetString(encrypted));
 
-            var decrypted = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decrypted = decryptResult.Content;
             Assert.Equal(body, decrypted);
         }
 
@@ -350,7 +354,8 @@ namespace Parcl.Core.Tests
             var encrypted = _smime.Encrypt(message, new X509Certificate2Collection { ourPubCert });
 
             // We decrypt with our private key
-            var decrypted = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decrypted = decryptResult.Content;
             Assert.Equal("Hey Ray, here's that encrypted reply!", Encoding.UTF8.GetString(decrypted));
         }
 
@@ -392,7 +397,8 @@ namespace Parcl.Core.Tests
 
             var signed = _smime.Sign(mime, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
-            var decryptedSigned = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decryptedSigned = decryptResult.Content;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -410,7 +416,8 @@ namespace Parcl.Core.Tests
 
             var signed = _smime.Sign(html, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
-            var decryptedSigned = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decryptedSigned = decryptResult.Content;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -438,7 +445,8 @@ namespace Parcl.Core.Tests
 
             var signed = _smime.Sign(mime, _userCert);
             var encrypted = _smime.Encrypt(signed, new X509Certificate2Collection { _userCert });
-            var decryptedSigned = _smime.Decrypt(encrypted);
+            var decryptResult = _smime.Decrypt(encrypted);
+            var decryptedSigned = decryptResult.Content;
             var result = _smime.Verify(decryptedSigned);
 
             Assert.True(result.IsValid);
@@ -484,7 +492,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _smime.Encrypt(body, new X509Certificate2Collection { wrongPfx });
 
                 // Our real cert should NOT be able to decrypt
-                Assert.ThrowsAny<CryptographicException>(() => _smime.Decrypt(encrypted));
+                var decryptResult = _smime.Decrypt(encrypted);
+                Assert.False(decryptResult.Success);
             }
         }
 
@@ -518,7 +527,7 @@ namespace Parcl.Core.Tests
 
             // Reverse
             if (alwaysEncrypt)
-                payload = _smime.Decrypt(payload);
+                payload = _smime.Decrypt(payload).Content;
 
             if (alwaysSign)
             {

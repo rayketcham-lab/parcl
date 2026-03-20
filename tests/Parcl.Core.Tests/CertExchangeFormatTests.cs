@@ -198,7 +198,8 @@ namespace Parcl.Core.Tests
                 var encrypted = handler.Encrypt(plaintext, new X509Certificate2Collection { alicePub });
 
                 // Alice decrypts with her private key (in store)
-                var decrypted = handler.Decrypt(encrypted);
+                var decryptResult = handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
                 Assert.Equal("Hello Alice, this is Bob!", Encoding.UTF8.GetString(decrypted));
             }

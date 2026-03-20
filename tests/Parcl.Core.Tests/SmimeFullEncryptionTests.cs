@@ -135,7 +135,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(plaintext, recipients);
 
                 // Both should be able to decrypt
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
 
                 // Verify the envelope has 2 recipient infos
@@ -162,7 +163,8 @@ namespace Parcl.Core.Tests
                 var recipients = new X509Certificate2Collection { _encCert1, _encCert2, _encCert3 };
                 var encrypted = _handler.Encrypt(plaintext, recipients);
 
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
 
                 var envelope = new EnvelopedCms();
@@ -189,7 +191,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(plaintext, recipients);
 
                 // Should still decrypt because cert2 is in the store with private key
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
             }
             finally
@@ -304,7 +307,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(signed, new X509Certificate2Collection { _encCert1 });
 
                 // Decrypt
-                var decryptedSigned = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decryptedSigned = decryptResult.Content;
 
                 // Verify signature (skip chain validation for self-signed)
                 var signedCms = new SignedCms();
@@ -331,7 +335,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(signed,
                     new X509Certificate2Collection { _encCert1, _encCert2 });
 
-                var decryptedSigned = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decryptedSigned = decryptResult.Content;
                 var signedCms = new SignedCms();
                 signedCms.Decode(decryptedSigned);
                 signedCms.CheckSignature(verifySignatureOnly: true);
@@ -363,7 +368,8 @@ namespace Parcl.Core.Tests
                 var encrypted = _handler.Encrypt(signed, new X509Certificate2Collection { _dualUseCert });
 
                 // Decrypt and verify (skip chain validation)
-                var decryptedSigned = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decryptedSigned = decryptResult.Content;
                 var signedCms = new SignedCms();
                 signedCms.Decode(decryptedSigned);
                 signedCms.CheckSignature(verifySignatureOnly: true);
@@ -397,7 +403,8 @@ namespace Parcl.Core.Tests
                 new Random(42).NextBytes(plaintext);
 
                 var encrypted = _handler.Encrypt(plaintext, new X509Certificate2Collection { _encCert1 });
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
             }
             finally
@@ -430,7 +437,8 @@ namespace Parcl.Core.Tests
 
                 var signed = _handler.Sign(plaintext, _signingCert);
                 var encrypted = _handler.Encrypt(signed, new X509Certificate2Collection { _encCert1 });
-                var decryptedSigned = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decryptedSigned = decryptResult.Content;
                 var signedCms = new SignedCms();
                 signedCms.Decode(decryptedSigned);
                 signedCms.CheckSignature(verifySignatureOnly: true);
@@ -475,7 +483,8 @@ namespace Parcl.Core.Tests
                 for (int i = 0; i < 256; i++) plaintext[i] = (byte)i;
 
                 var encrypted = _handler.Encrypt(plaintext, new X509Certificate2Collection { _encCert1 });
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
             }
             finally
@@ -492,7 +501,8 @@ namespace Parcl.Core.Tests
             {
                 var plaintext = Encoding.UTF8.GetBytes("Héllo Wörld! 你好世界 🔐📧 Ñoño señor");
                 var encrypted = _handler.Encrypt(plaintext, new X509Certificate2Collection { _encCert1 });
-                var decrypted = _handler.Decrypt(encrypted);
+                var decryptResult = _handler.Decrypt(encrypted);
+                var decrypted = decryptResult.Content;
                 Assert.Equal(plaintext, decrypted);
                 Assert.Equal("Héllo Wörld! 你好世界 🔐📧 Ñoño señor", Encoding.UTF8.GetString(decrypted));
             }
@@ -513,7 +523,8 @@ namespace Parcl.Core.Tests
             var plaintext = Encoding.UTF8.GetBytes("No matching private key.");
             var encrypted = _handler.Encrypt(plaintext, new X509Certificate2Collection { _encCert1 });
 
-            Assert.ThrowsAny<CryptographicException>(() => _handler.Decrypt(encrypted));
+            var result = _handler.Decrypt(encrypted);
+            Assert.False(result.Success);
         }
 
         [Fact]
@@ -529,7 +540,8 @@ namespace Parcl.Core.Tests
         public void Decrypt_GarbageData_Throws()
         {
             var garbage = Encoding.UTF8.GetBytes("This is not valid CMS data.");
-            Assert.ThrowsAny<CryptographicException>(() => _handler.Decrypt(garbage));
+            var result = _handler.Decrypt(garbage);
+            Assert.False(result.Success);
         }
 
         [Fact]
