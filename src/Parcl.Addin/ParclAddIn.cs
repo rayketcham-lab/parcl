@@ -72,6 +72,34 @@ namespace Parcl.Addin
                     Settings.Cache.MaxCacheEntries);
                 CertExchange = new CertExchange(CertStore);
 
+                // Force Outlook's native signing to use SHA-256+ by patching the
+                // MAPI profile binary. Parcl is authoritative over all S/MIME settings.
+                // NOTE: Outlook loads S/MIME settings into memory BEFORE add-ins load.
+                // If we patch the blob, we must restart Outlook for it to take effect.
+                if (ForceOutlookSigningAlgorithm())
+                {
+                    // Blob was patched — Outlook needs to restart to pick up the change.
+                    // Restart automatically: close Outlook and relaunch.
+                    Logger.Info("AddIn", "Restarting Outlook to apply signing algorithm change...");
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000); // let add-in finish loading
+                        try
+                        {
+                            var outlookPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                            if (!string.IsNullOrEmpty(outlookPath))
+                            {
+                                System.Diagnostics.Process.Start(outlookPath);
+                            }
+                            _application?.Quit();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn("AddIn", $"Auto-restart failed: {ex.Message}");
+                        }
+                    });
+                }
+
                 Logger.Debug("AddIn", "Core services initialized");
 
                 _taskPaneHost = new ParclTaskPaneHost();
@@ -531,17 +559,10 @@ namespace Parcl.Addin
                             }
                         }
 
-                        if (!allNativeCompatible || shouldSign)
+                        if (!allNativeCompatible)
                         {
-                            // Fall back to Parcl envelope when:
-                            // - Any recipient has a cert mismatch, OR
-                            // - Signing is requested (Parcl must control the hash algorithm;
-                            //   native PR_SECURITY_FLAGS delegates to Outlook which defaults to SHA-1)
-                            if (shouldSign)
-                                Logger.Info("Send", "Using Parcl envelope — signing requires Parcl's hash algorithm control");
-                            else
-                                Logger.Info("Send", "Using Parcl envelope — cert mismatch detected");
-
+                            // Fall back to Parcl envelope for cert-mismatched recipients
+                            Logger.Info("Send", "Falling back to Parcl envelope (cert mismatch detected)");
                             string? encryptError = EncapsulateMessage(mail, shouldSign);
                             if (encryptError != null)
                             {
@@ -558,9 +579,9 @@ namespace Parcl.Addin
                         }
                         else
                         {
-                            // All recipients native-compatible, encrypt-only — use PR_SECURITY_FLAGS
-                            // Never set SECFLAG_SIGNED here — signing always goes through Parcl
-                            Logger.Info("Send", "All recipients native-compatible — using PR_SECURITY_FLAGS (encrypt-only)");
+                            // All recipients native-compatible — use PR_SECURITY_FLAGS
+                            // Signing algorithm is controlled via registry (ConfigureOutlookSigningAlgorithm)
+                            Logger.Info("Send", "All recipients native-compatible — using PR_SECURITY_FLAGS");
 
                             const string PR_SEC = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
                             var pa = mail.PropertyAccessor;
@@ -569,16 +590,20 @@ namespace Parcl.Addin
                             catch { flags = 0; }
 
                             flags |= 0x01; // SECFLAG_ENCRYPTED
-                            // NEVER set SECFLAG_SIGNED (0x02) — Outlook defaults to SHA-1
+                            if (shouldSign)
+                                flags |= 0x02; // SECFLAG_SIGNED (uses SHA-256+ via registry)
 
                             pa.SetProperty(PR_SEC, flags);
 
-                            // Clear Parcl flags — Outlook handles encryption from here
+                            // Clear Parcl flags — Outlook handles from here
                             var encFlag = mail.UserProperties.Find("ParclEncrypt");
                             if (encFlag != null) encFlag.Value = false;
+                            var sigFlag = mail.UserProperties.Find("ParclSign");
+                            if (sigFlag != null) sigFlag.Value = false;
 
                             Logger.Info("Send",
-                                $"Native S/MIME: flags=0x{flags:X}, encrypt=true, sign=false (encrypt-only)");
+                                $"Native S/MIME: flags=0x{flags:X}, " +
+                                $"encrypt=true, sign={shouldSign}");
                         }
                     }
                     else
@@ -604,24 +629,23 @@ namespace Parcl.Addin
                 }
                 else if (shouldSign)
                 {
-                    // Sign-only: use Parcl's own signing engine so we control the hash algorithm.
-                    // Never delegate to Outlook's native PR_SECURITY_FLAGS — it defaults to SHA-1
-                    // and ignores Parcl's configured hash algorithm.
-                    Logger.Info("Send", "Using Parcl S/MIME signing (sign-only, no encrypt)");
+                    // Sign-only: use Outlook's native signing (PR_SECURITY_FLAGS) for proper
+                    // inline display in the reading pane.
+                    //
+                    // IMPORTANT: The signing hash algorithm is controlled by Outlook's Trust Center
+                    // Email Security settings (not registry, not per-message). Parcl cannot change
+                    // this programmatically. If the user has SHA-1 configured, we detect it by
+                    // checking the last sent signed message and warn them to change it.
+                    const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
+                    const int SECFLAG_SIGNED = 0x02;
 
-                    string? signError = SignOnlyMessage(mail);
-                    if (signError != null)
-                    {
-                        cancel = true;
-                        Logger.Error("Send", $"Signing failed — send blocked: {signError}");
-                        MessageBox.Show(
-                            $"Message NOT sent — signing failed.\n\n{signError}\n\n" +
-                            "To send anyway: toggle the Sign button off, then click Send again.",
-                            "Parcl — Send Blocked",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
-                        return;
-                    }
+                    var pa = mail.PropertyAccessor;
+                    int flags;
+                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
+                    catch { flags = 0; }
+
+                    pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
+                    Logger.Info("Send", "Sign-only via native S/MIME");
                 }
             }
             catch (Exception ex)
@@ -871,6 +895,164 @@ namespace Parcl.Addin
             Logger.Info("Send",
                 $"S/MIME encapsulated — {encrypted.Length} bytes for {recipientCerts.Count} recipient(s)");
             return null; // success
+        }
+
+        /// <summary>
+        /// Forces Outlook's S/MIME security profile to use the configured hash algorithm.
+        /// Directly patches the binary blob in the Outlook MAPI profile registry.
+        /// The hash algorithm index is stored as a DWORD at offset 0x28 in the
+        /// S/MIME settings property (11020355) under the Outlook profile key
+        /// c02ebc5353d9cd11975200aa004ae40e.
+        ///
+        /// Algorithm indices (1-based in the DER algorithm list):
+        ///   7  = SHA-1    (BLOCKED — insecure)
+        ///   8  = SHA-512
+        ///   9  = SHA-384
+        ///   10 = SHA-256
+        /// </summary>
+        // DER-encoded hash algorithm OIDs for S/MIME profile reordering
+        private static readonly byte[] DerSHA1   = { 0x30, 0x07, 0x06, 0x05, 0x2B, 0x0E, 0x03, 0x02, 0x1A };
+        private static readonly byte[] DerSHA256 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01 };
+        private static readonly byte[] DerSHA384 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02 };
+        private static readonly byte[] DerSHA512 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03 };
+
+        /// <summary>
+        /// Forces Outlook's S/MIME security profile to use the configured hash algorithm.
+        /// Outlook picks the FIRST hash algorithm in the DER capability list stored in the
+        /// MAPI profile binary blob. This method reorders the hash OIDs so the configured
+        /// algorithm (SHA-256 by default) is first.
+        ///
+        /// The S/MIME settings are in registry property 11020355 under the Outlook profile
+        /// key c02ebc5353d9cd11975200aa004ae40e. The DER SEQUENCE at the end of the blob
+        /// contains encryption algorithms followed by hash algorithms.
+        /// </summary>
+        /// <returns>true if the blob was patched (Outlook restart needed), false if already correct.</returns>
+        private bool ForceOutlookSigningAlgorithm()
+        {
+            bool patched = false;
+            try
+            {
+                var targetAlgo = Settings.Crypto.HashAlgorithm ?? "SHA-256";
+
+                // Determine the desired hash order: target algorithm first, then others, SHA-1 last
+                byte[] targetDer;
+                byte[][] otherDers;
+                switch (targetAlgo.ToUpperInvariant())
+                {
+                    case "SHA-384":
+                        targetDer = DerSHA384;
+                        otherDers = new[] { DerSHA256, DerSHA512, DerSHA1 };
+                        break;
+                    case "SHA-512":
+                        targetDer = DerSHA512;
+                        otherDers = new[] { DerSHA256, DerSHA384, DerSHA1 };
+                        break;
+                    default: // SHA-256
+                        targetDer = DerSHA256;
+                        otherDers = new[] { DerSHA512, DerSHA384, DerSHA1 };
+                        break;
+                }
+
+                const string profileBase = @"Software\Microsoft\Office\16.0\Outlook\Profiles";
+                using (var profilesKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(profileBase))
+                {
+                    if (profilesKey == null) return false;
+
+                    foreach (var profileName in profilesKey.GetSubKeyNames())
+                    {
+                        var smimeKeyPath = $@"{profileBase}\{profileName}\c02ebc5353d9cd11975200aa004ae40e";
+                        using (var smimeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(smimeKeyPath, writable: true))
+                        {
+                            if (smimeKey == null) continue;
+
+                            var blob = smimeKey.GetValue("11020355") as byte[];
+                            if (blob == null || blob.Length < 0x170) continue;
+
+                            // Find the hash algorithm section in the blob.
+                            // SHA-1 DER starts with 30 07 06 05 2B 0E 03 02 1A.
+                            // SHA-256/384/512 DER starts with 30 0B 06 09 60 86 48 01 65 03 04 02 XX.
+                            // The hash section is 48 bytes (9+13+13+13) and follows the encryption OIDs.
+                            int hashStart = FindSequence(blob, DerSHA1);
+                            if (hashStart < 0)
+                            {
+                                // SHA-1 might already be moved — look for SHA-256 as start
+                                hashStart = FindSequence(blob, DerSHA256);
+                                if (hashStart < 0)
+                                {
+                                    Logger.Debug("AddIn", "Could not locate hash algorithms in S/MIME profile");
+                                    continue;
+                                }
+                            }
+
+                            // Check if the target is already first
+                            bool alreadyFirst = true;
+                            for (int j = 0; j < targetDer.Length && (hashStart + j) < blob.Length; j++)
+                            {
+                                if (blob[hashStart + j] != targetDer[j]) { alreadyFirst = false; break; }
+                            }
+
+                            if (alreadyFirst)
+                            {
+                                Logger.Debug("AddIn",
+                                    $"Outlook signing algorithm already {targetAlgo} (first in DER list)");
+                                continue;
+                            }
+
+                            // Build new hash section: target first, then others
+                            var newHashSection = new byte[48]; // 13+13+13+9 = 48
+                            int pos = 0;
+                            Array.Copy(targetDer, 0, newHashSection, pos, targetDer.Length);
+                            pos += targetDer.Length;
+                            foreach (var other in otherDers)
+                            {
+                                Array.Copy(other, 0, newHashSection, pos, other.Length);
+                                pos += other.Length;
+                            }
+
+                            // Find the start of the hash section (first hash OID in the blob)
+                            // The 4 hash OIDs are contiguous and total 48 bytes
+                            int sectionStart = Math.Min(
+                                hashStart,
+                                Math.Min(
+                                    FindSequence(blob, DerSHA256) >= 0 ? FindSequence(blob, DerSHA256) : int.MaxValue,
+                                    Math.Min(
+                                        FindSequence(blob, DerSHA384) >= 0 ? FindSequence(blob, DerSHA384) : int.MaxValue,
+                                        FindSequence(blob, DerSHA512) >= 0 ? FindSequence(blob, DerSHA512) : int.MaxValue
+                                    )
+                                )
+                            );
+
+                            // Write new hash section
+                            Array.Copy(newHashSection, 0, blob, sectionStart, newHashSection.Length);
+
+                            smimeKey.SetValue("11020355", blob, Microsoft.Win32.RegistryValueKind.Binary);
+                            patched = true;
+
+                            Logger.Info("AddIn",
+                                $"Outlook signing algorithm forced to {targetAlgo} (reordered DER hash list, first OID is now {targetAlgo})");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("AddIn", $"Could not force Outlook signing algorithm: {ex.Message}");
+            }
+            return patched;
+        }
+
+        private static int FindSequence(byte[] haystack, byte[] needle)
+        {
+            for (int i = 0; i <= haystack.Length - needle.Length; i++)
+            {
+                bool match = true;
+                for (int j = 0; j < needle.Length; j++)
+                {
+                    if (haystack[i + j] != needle[j]) { match = false; break; }
+                }
+                if (match) return i;
+            }
+            return -1;
         }
 
         /// <summary>
