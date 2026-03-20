@@ -72,13 +72,13 @@
           <RegistryValue Type="string" Value="mscoree.dll" />
           <RegistryValue Name="ThreadingModel" Type="string" Value="Both" />
           <RegistryValue Name="Class" Type="string" Value="Parcl.Addin.ParclAddIn" />
-          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0dbfe1478aff99e5" />
           <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
           <RegistryValue Name="CodeBase" Type="string" Value="file:///[AddinDir]Parcl.Addin.dll" />
         </RegistryKey>
         <RegistryKey Root="HKCU" Key="Software\Classes\CLSID\{B8F0C3A2-7D5E-4F91-A6C8-9E1B3D5A7F42}\InprocServer32\1.0.0.0">
           <RegistryValue Name="Class" Type="string" Value="Parcl.Addin.ParclAddIn" />
-          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+          <RegistryValue Name="Assembly" Type="string" Value="Parcl.Addin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0dbfe1478aff99e5" />
           <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
           <RegistryValue Name="CodeBase" Type="string" Value="file:///[AddinDir]Parcl.Addin.dll" />
         </RegistryKey>

@@ -1,0 +1,37 @@
+<Project>
+  <!--
+    Shared build properties for all Parcl assemblies.
+    Applies strong naming, deterministic builds, and enterprise hardening.
+  -->
+  <PropertyGroup>
+    <!-- Strong naming — required for COM interop trust and enterprise Group Policy -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Parcl.snk</AssemblyOriginatorKeyFile>
+    <DelaySign>false</DelaySign>
+
+    <!-- Deterministic builds — same source always produces same binary -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Company / assembly metadata -->
+    <Company>Parcl</Company>
+    <Product>Parcl — Outlook Certificate Manager</Product>
+    <Copyright>Copyright © Parcl 2024-2028. All rights reserved.</Copyright>
+
+    <!-- Treat warnings as errors in Release builds -->
+    <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>
+
+    <!-- Enable source link for debuggability -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Authenticode signing in Release CI builds (requires SIGN_CERT_THUMBPRINT env var) -->
+  <Target Name="AuthenticodeSign" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' AND '$(SIGN_CERT_THUMBPRINT)' != ''">
+    <Exec Command="signtool sign /sha1 $(SIGN_CERT_THUMBPRINT) /tr http://timestamp.sectigo.com /td sha256 /fd sha256 &quot;$(TargetPath)&quot;"
+          IgnoreExitCode="false" />
+  </Target>
+</Project>

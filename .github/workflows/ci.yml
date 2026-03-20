@@ -43,6 +43,30 @@ jobs:
       - name: Run tests
         run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
 
+      - name: Verify strong name — Parcl.Core
+        run: |
+          & "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\x64\sn.exe" -vf src\Parcl.Core\bin\Release\net48\Parcl.Core.dll
+        shell: pwsh
+
+      - name: Verify strong name — Parcl.Addin
+        run: |
+          & "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\x64\sn.exe" -vf src\Parcl.Addin\bin\Release\net48\Parcl.Addin.dll
+        shell: pwsh
+
+      - name: Verify assembly metadata
+        run: |
+          $core = [System.Reflection.AssemblyName]::GetAssemblyName("src\Parcl.Core\bin\Release\net48\Parcl.Core.dll")
+          $addin = [System.Reflection.AssemblyName]::GetAssemblyName("src\Parcl.Addin\bin\Release\net48\Parcl.Addin.dll")
+          $coreToken = [BitConverter]::ToString($core.GetPublicKeyToken()) -replace '-',''
+          $addinToken = [BitConverter]::ToString($addin.GetPublicKeyToken()) -replace '-',''
+          Write-Host "Parcl.Core: $($core.FullName)"
+          Write-Host "Parcl.Addin: $($addin.FullName)"
+          if ($coreToken.Length -eq 0) { Write-Error "Parcl.Core is NOT strong-named"; exit 1 }
+          if ($addinToken.Length -eq 0) { Write-Error "Parcl.Addin is NOT strong-named"; exit 1 }
+          if ($coreToken -ne $addinToken) { Write-Error "PublicKeyToken mismatch: Core=$coreToken Addin=$addinToken"; exit 1 }
+          Write-Host "Strong name verified: PublicKeyToken=$coreToken"
+        shell: pwsh
+
       - name: Upload MSI installer
         uses: actions/upload-artifact@v4
         with:
