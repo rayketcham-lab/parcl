@@ -72,33 +72,10 @@ namespace Parcl.Addin
                     Settings.Cache.MaxCacheEntries);
                 CertExchange = new CertExchange(CertStore);
 
-                // Force Outlook's native signing to use SHA-256+ by patching the
-                // MAPI profile binary. Parcl is authoritative over all S/MIME settings.
-                // NOTE: Outlook loads S/MIME settings into memory BEFORE add-ins load.
-                // If we patch the blob, we must restart Outlook for it to take effect.
-                if (ForceOutlookSigningAlgorithm())
-                {
-                    // Blob was patched — Outlook needs to restart to pick up the change.
-                    // Restart automatically: close Outlook and relaunch.
-                    Logger.Info("AddIn", "Restarting Outlook to apply signing algorithm change...");
-                    System.Threading.Tasks.Task.Run(async () =>
-                    {
-                        await System.Threading.Tasks.Task.Delay(2000); // let add-in finish loading
-                        try
-                        {
-                            var outlookPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-                            if (!string.IsNullOrEmpty(outlookPath))
-                            {
-                                System.Diagnostics.Process.Start(outlookPath);
-                            }
-                            _application?.Quit();
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Warn("AddIn", $"Auto-restart failed: {ex.Message}");
-                        }
-                    });
-                }
+                // Force Outlook's native S/MIME algorithms via KB4486720 registry keys.
+                // These override Trust Center settings. No restart needed — Outlook reads
+                // the registry keys at sign/encrypt time, not just at startup.
+                ForceOutlookSigningAlgorithm();
 
                 Logger.Debug("AddIn", "Core services initialized");
 
@@ -893,149 +870,102 @@ namespace Parcl.Addin
         ///   9  = SHA-384
         ///   10 = SHA-256
         /// </summary>
-        // DER-encoded hash algorithm OIDs for S/MIME profile reordering
-        private static readonly byte[] DerSHA1   = { 0x30, 0x07, 0x06, 0x05, 0x2B, 0x0E, 0x03, 0x02, 0x1A };
-        private static readonly byte[] DerSHA256 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01 };
-        private static readonly byte[] DerSHA384 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02 };
-        private static readonly byte[] DerSHA512 = { 0x30, 0x0B, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03 };
+        // OID lookup for Outlook registry key DefaultHashOID
+        private static readonly System.Collections.Generic.Dictionary<string, string> OutlookHashOids =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SHA-256"] = "2.16.840.1.101.3.4.2.1",
+                ["SHA-384"] = "2.16.840.1.101.3.4.2.2",
+                ["SHA-512"] = "2.16.840.1.101.3.4.2.3",
+            };
+
+        // OID lookup for Outlook registry key DefaultEncryptionAlgOID
+        private static readonly System.Collections.Generic.Dictionary<string, string> OutlookEncryptionOids =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AES-128-CBC"] = "2.16.840.1.101.3.4.1.2",
+                ["AES-192-CBC"] = "2.16.840.1.101.3.4.1.22",
+                ["AES-256-CBC"] = "2.16.840.1.101.3.4.1.42",
+            };
 
         /// <summary>
-        /// Forces Outlook's S/MIME security profile to use the configured hash algorithm.
-        /// Outlook picks the FIRST hash algorithm in the DER capability list stored in the
-        /// MAPI profile binary blob. This method reorders the hash OIDs so the configured
-        /// algorithm (SHA-256 by default) is first.
+        /// Forces Outlook's native S/MIME signing and encryption algorithms via registry keys.
+        /// Uses the KB4486720 mechanism (November 2020 update for Outlook 2016):
+        ///   HKCU\Software\Microsoft\Office\16.0\Outlook\Security
+        ///     UseAlternateDefaultHashAlg (DWORD) = 1
+        ///     DefaultHashOID (String) = algorithm OID
+        ///     UseAlternateDefaultEncryptionAlg (DWORD) = 1
+        ///     DefaultEncryptionAlgOID (String) = algorithm OID
         ///
-        /// The S/MIME settings are in registry property 11020355 under the Outlook profile
-        /// key c02ebc5353d9cd11975200aa004ae40e. The DER SEQUENCE at the end of the blob
-        /// contains encryption algorithms followed by hash algorithms.
+        /// These registry keys override the Trust Center UI settings. Parcl is authoritative.
         /// </summary>
-        /// <returns>true if the blob was patched (Outlook restart needed), false if already correct.</returns>
+        /// <returns>true if any key was changed, false if already correct.</returns>
         private bool ForceOutlookSigningAlgorithm()
         {
-            bool patched = false;
+            bool changed = false;
             try
             {
-                var targetAlgo = Settings.Crypto.HashAlgorithm ?? "SHA-256";
+                const string securityKeyPath = @"Software\Microsoft\Office\16.0\Outlook\Security";
 
-                // Determine the desired hash order: target algorithm first, then others, SHA-1 last
-                byte[] targetDer;
-                byte[][] otherDers;
-                switch (targetAlgo.ToUpperInvariant())
+                // Resolve configured algorithms to OIDs
+                var hashAlgo = Settings.Crypto.HashAlgorithm ?? "SHA-256";
+                if (!OutlookHashOids.TryGetValue(hashAlgo, out var hashOid))
+                    hashOid = "2.16.840.1.101.3.4.2.1"; // default SHA-256
+
+                var encAlgo = Settings.Crypto.EncryptionAlgorithm ?? "AES-256-CBC";
+                if (!OutlookEncryptionOids.TryGetValue(encAlgo, out var encOid))
+                    encOid = "2.16.840.1.101.3.4.1.42"; // default AES-256-CBC
+
+                using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(securityKeyPath))
                 {
-                    case "SHA-384":
-                        targetDer = DerSHA384;
-                        otherDers = new[] { DerSHA256, DerSHA512, DerSHA1 };
-                        break;
-                    case "SHA-512":
-                        targetDer = DerSHA512;
-                        otherDers = new[] { DerSHA256, DerSHA384, DerSHA1 };
-                        break;
-                    default: // SHA-256
-                        targetDer = DerSHA256;
-                        otherDers = new[] { DerSHA512, DerSHA384, DerSHA1 };
-                        break;
-                }
-
-                const string profileBase = @"Software\Microsoft\Office\16.0\Outlook\Profiles";
-                using (var profilesKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(profileBase))
-                {
-                    if (profilesKey == null) return false;
-
-                    foreach (var profileName in profilesKey.GetSubKeyNames())
+                    if (key == null)
                     {
-                        var smimeKeyPath = $@"{profileBase}\{profileName}\c02ebc5353d9cd11975200aa004ae40e";
-                        using (var smimeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(smimeKeyPath, writable: true))
-                        {
-                            if (smimeKey == null) continue;
+                        Logger.Warn("AddIn", "Could not open Outlook Security registry key");
+                        return false;
+                    }
 
-                            var blob = smimeKey.GetValue("11020355") as byte[];
-                            if (blob == null || blob.Length < 0x170) continue;
+                    // Force signing hash algorithm
+                    var currentHashEnabled = key.GetValue("UseAlternateDefaultHashAlg");
+                    var currentHashOid = key.GetValue("DefaultHashOID") as string;
 
-                            // Find the hash algorithm section in the blob.
-                            // SHA-1 DER starts with 30 07 06 05 2B 0E 03 02 1A.
-                            // SHA-256/384/512 DER starts with 30 0B 06 09 60 86 48 01 65 03 04 02 XX.
-                            // The hash section is 48 bytes (9+13+13+13) and follows the encryption OIDs.
-                            int hashStart = FindSequence(blob, DerSHA1);
-                            if (hashStart < 0)
-                            {
-                                // SHA-1 might already be moved — look for SHA-256 as start
-                                hashStart = FindSequence(blob, DerSHA256);
-                                if (hashStart < 0)
-                                {
-                                    Logger.Debug("AddIn", "Could not locate hash algorithms in S/MIME profile");
-                                    continue;
-                                }
-                            }
+                    if (currentHashEnabled == null || (int)currentHashEnabled != 1 || currentHashOid != hashOid)
+                    {
+                        key.SetValue("UseAlternateDefaultHashAlg", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("DefaultHashOID", hashOid, Microsoft.Win32.RegistryValueKind.String);
+                        changed = true;
+                        Logger.Info("AddIn",
+                            $"Outlook signing hash forced to {hashAlgo} (OID {hashOid})" +
+                            (currentHashOid != null ? $" — was: {currentHashOid}" : ""));
+                    }
+                    else
+                    {
+                        Logger.Debug("AddIn", $"Outlook signing hash already {hashAlgo}");
+                    }
 
-                            // Check if the target is already first
-                            bool alreadyFirst = true;
-                            for (int j = 0; j < targetDer.Length && (hashStart + j) < blob.Length; j++)
-                            {
-                                if (blob[hashStart + j] != targetDer[j]) { alreadyFirst = false; break; }
-                            }
+                    // Force encryption algorithm
+                    var currentEncEnabled = key.GetValue("UseAlternateDefaultEncryptionAlg");
+                    var currentEncOid = key.GetValue("DefaultEncryptionAlgOID") as string;
 
-                            if (alreadyFirst)
-                            {
-                                Logger.Debug("AddIn",
-                                    $"Outlook signing algorithm already {targetAlgo} (first in DER list)");
-                                continue;
-                            }
-
-                            // Build new hash section: target first, then others
-                            var newHashSection = new byte[48]; // 13+13+13+9 = 48
-                            int pos = 0;
-                            Array.Copy(targetDer, 0, newHashSection, pos, targetDer.Length);
-                            pos += targetDer.Length;
-                            foreach (var other in otherDers)
-                            {
-                                Array.Copy(other, 0, newHashSection, pos, other.Length);
-                                pos += other.Length;
-                            }
-
-                            // Find the start of the hash section (first hash OID in the blob)
-                            // The 4 hash OIDs are contiguous and total 48 bytes
-                            int sectionStart = Math.Min(
-                                hashStart,
-                                Math.Min(
-                                    FindSequence(blob, DerSHA256) >= 0 ? FindSequence(blob, DerSHA256) : int.MaxValue,
-                                    Math.Min(
-                                        FindSequence(blob, DerSHA384) >= 0 ? FindSequence(blob, DerSHA384) : int.MaxValue,
-                                        FindSequence(blob, DerSHA512) >= 0 ? FindSequence(blob, DerSHA512) : int.MaxValue
-                                    )
-                                )
-                            );
-
-                            // Write new hash section
-                            Array.Copy(newHashSection, 0, blob, sectionStart, newHashSection.Length);
-
-                            smimeKey.SetValue("11020355", blob, Microsoft.Win32.RegistryValueKind.Binary);
-                            patched = true;
-
-                            Logger.Info("AddIn",
-                                $"Outlook signing algorithm forced to {targetAlgo} (reordered DER hash list, first OID is now {targetAlgo})");
-                        }
+                    if (currentEncEnabled == null || (int)currentEncEnabled != 1 || currentEncOid != encOid)
+                    {
+                        key.SetValue("UseAlternateDefaultEncryptionAlg", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("DefaultEncryptionAlgOID", encOid, Microsoft.Win32.RegistryValueKind.String);
+                        changed = true;
+                        Logger.Info("AddIn",
+                            $"Outlook encryption algo forced to {encAlgo} (OID {encOid})" +
+                            (currentEncOid != null ? $" — was: {currentEncOid}" : ""));
+                    }
+                    else
+                    {
+                        Logger.Debug("AddIn", $"Outlook encryption algo already {encAlgo}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Warn("AddIn", $"Could not force Outlook signing algorithm: {ex.Message}");
+                Logger.Warn("AddIn", $"Could not force Outlook S/MIME algorithms: {ex.Message}");
             }
-            return patched;
-        }
-
-        private static int FindSequence(byte[] haystack, byte[] needle)
-        {
-            for (int i = 0; i <= haystack.Length - needle.Length; i++)
-            {
-                bool match = true;
-                for (int j = 0; j < needle.Length; j++)
-                {
-                    if (haystack[i + j] != needle[j]) { match = false; break; }
-                }
-                if (match) return i;
-            }
-            return -1;
+            return changed;
         }
 
         /// <summary>
