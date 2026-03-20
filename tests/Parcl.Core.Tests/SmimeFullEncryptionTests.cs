@@ -611,25 +611,6 @@ namespace Parcl.Core.Tests
             }
         }
 
-        private static void TrustCert(X509Certificate2 cert)
-        {
-            using (var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser))
-            {
-                store.Open(OpenFlags.ReadWrite);
-                store.Add(cert);
-            }
-        }
-
-        private static void UntrustCert(X509Certificate2 cert)
-        {
-            using (var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser))
-            {
-                store.Open(OpenFlags.ReadWrite);
-                var matches = store.Certificates.Find(X509FindType.FindByThumbprint, cert.Thumbprint, false);
-                foreach (X509Certificate2 c in matches)
-                    store.Remove(c);
-            }
-        }
 
         private static X509Certificate2 CreateCert(string subject, X509KeyUsageFlags keyUsage,
             DateTimeOffset? notBefore = null, DateTimeOffset? notAfter = null)

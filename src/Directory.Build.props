@@ -16,7 +16,7 @@
     <!-- Company / assembly metadata -->
     <Company>Parcl</Company>
     <Product>Parcl — Outlook Certificate Manager</Product>
-    <Copyright>Copyright © Parcl 2024-2028. All rights reserved.</Copyright>
+    <Copyright>Copyright © Parcl 2024-$([System.DateTime]::Now.Year). All rights reserved.</Copyright>
 
     <!-- Treat warnings as errors in Release builds -->
     <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>

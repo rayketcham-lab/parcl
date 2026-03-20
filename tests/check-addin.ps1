@@ -7,7 +7,9 @@ Remove-ItemProperty 'HKCU:\Software\Microsoft\Office\16.0\Outlook\Resiliency\Cra
 
 Write-Host "LoadBehavior set to 3, resiliency cleared"
 
-Start-Process 'C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE'
+$outlookPath = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\OUTLOOK.EXE' -ErrorAction SilentlyContinue).'(default)'
+if (-not $outlookPath) { $outlookPath = 'OUTLOOK.EXE' }
+Start-Process $outlookPath
 Write-Host "Waiting for Outlook..."
 Start-Sleep 20
 

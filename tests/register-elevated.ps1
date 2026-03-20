@@ -1,5 +1,13 @@
 # This script must run elevated (Run as Administrator)
-$dll = 'C:\parcl\src\Parcl.Addin\bin\Debug\net48\Parcl.Addin.dll'
+param(
+    [string]$Configuration = "Debug"
+)
+
+$dll = Join-Path $PSScriptRoot "..\src\Parcl.Addin\bin\$Configuration\net48\Parcl.Addin.dll"
+if (-not (Test-Path $dll)) {
+    Write-Error "DLL not found: $dll — build the project first."
+    exit 1
+}
 
 # Unregister first
 Write-Host "Unregistering..."
