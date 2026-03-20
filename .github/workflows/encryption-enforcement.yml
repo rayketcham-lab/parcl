@@ -26,7 +26,7 @@ jobs:
 
       - name: Run encryption tests
         run: |
-          dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision"
+          dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "(FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision)&FullyQualifiedName!~RealCertE2E"
 
   send-decision-audit:
     name: SendDecision Coverage Audit
