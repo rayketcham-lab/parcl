@@ -346,48 +346,79 @@ namespace Parcl.Addin
                     try { File.Delete(tempPath); } catch { }
                 }
 
-                // ── Step 1: Decrypt the CMS envelope ──
-                var result = SmimeHandler.Decrypt(encryptedData);
-                if (!result.Success || result.Content == null)
-                {
-                    Logger.Error("Decrypt", $"Decryption failed: {result.ErrorMessage}");
-                    MessageBox.Show(
-                        "Decryption failed — could not unlock this message.\n\n" +
-                        "Why: This message was likely encrypted for a different certificate than the one currently installed on your machine.\n\n" +
-                        "Fix: Go to Parcl > Select Certificates and verify your encryption certificate matches the one the sender used. " +
-                        "If you recently changed certificates, ask the sender to re-encrypt using your current certificate.",
-                        "Parcl — Decrypt Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                byte[] mimeBytes = result.Content;
-                Logger.Debug("Decrypt", $"CMS envelope decrypted: {mimeBytes.Length} bytes");
-
-                // ── Step 2: Unwrap SignedCms if present (sign-then-encrypt) ──
+                // ── Step 1: Try to decrypt, or handle sign-only ──
+                bool isSignOnly = false;
                 bool wasSigned = false;
                 string? signerInfo = null;
-                try
-                {
-                    var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();
-                    signedCms.Decode(mimeBytes);
-                    signedCms.CheckSignature(verifySignatureOnly: false);
-                    mimeBytes = signedCms.ContentInfo.Content;
-                    wasSigned = true;
+                byte[] mimeBytes;
 
-                    if (signedCms.SignerInfos.Count > 0 && signedCms.SignerInfos[0].Certificate != null)
+                var result = SmimeHandler.Decrypt(encryptedData);
+                if (result.Success && result.Content != null)
+                {
+                    mimeBytes = result.Content;
+                    Logger.Debug("Decrypt", $"CMS envelope decrypted: {mimeBytes.Length} bytes");
+
+                    // ── Step 2a: Unwrap SignedCms if present (sign-then-encrypt) ──
+                    try
                     {
-                        var sigCert = signedCms.SignerInfos[0].Certificate!;
-                        signerInfo = sigCert.Subject;
-                        Logger.Info("Decrypt",
-                            $"Signature verified — signer: {sigCert.Subject}, " +
-                            $"thumbprint: {sigCert.Thumbprint.Substring(0, 8)}");
+                        var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();
+                        signedCms.Decode(mimeBytes);
+                        signedCms.CheckSignature(verifySignatureOnly: false);
+                        mimeBytes = signedCms.ContentInfo.Content;
+                        wasSigned = true;
+
+                        if (signedCms.SignerInfos.Count > 0 && signedCms.SignerInfos[0].Certificate != null)
+                        {
+                            var sigCert = signedCms.SignerInfos[0].Certificate!;
+                            signerInfo = sigCert.Subject;
+                            Logger.Info("Decrypt",
+                                $"Signature verified — signer: {sigCert.Subject}, " +
+                                $"thumbprint: {sigCert.Thumbprint.Substring(0, 8)}");
+                        }
+                    }
+                    catch (System.Security.Cryptography.CryptographicException)
+                    {
+                        // Not a SignedCms — content is raw MIME, which is fine (encrypt-only)
+                        Logger.Debug("Decrypt", "Content is not signed (encrypt-only)");
                     }
                 }
-                catch (System.Security.Cryptography.CryptographicException)
+                else
                 {
-                    // Not a SignedCms — content is raw MIME, which is fine (encrypt-only)
-                    Logger.Debug("Decrypt", "Content is not signed (encrypt-only)");
+                    // ── Step 2b: Decryption failed — try as sign-only (opaque SignedCms) ──
+                    Logger.Debug("Decrypt", "Not an encrypted message, trying as sign-only SignedCms");
+                    try
+                    {
+                        var signedCms = new System.Security.Cryptography.Pkcs.SignedCms();
+                        signedCms.Decode(encryptedData);
+                        signedCms.CheckSignature(verifySignatureOnly: false);
+                        mimeBytes = signedCms.ContentInfo.Content;
+                        isSignOnly = true;
+                        wasSigned = true;
+
+                        if (signedCms.SignerInfos.Count > 0 && signedCms.SignerInfos[0].Certificate != null)
+                        {
+                            var sigCert = signedCms.SignerInfos[0].Certificate!;
+                            signerInfo = sigCert.Subject;
+                            var digestAlg = signedCms.SignerInfos[0].DigestAlgorithm.FriendlyName ?? "Unknown";
+                            Logger.Info("Decrypt",
+                                $"Sign-only verified — signer: {sigCert.Subject}, " +
+                                $"digest: {digestAlg}, " +
+                                $"thumbprint: {sigCert.Thumbprint.Substring(0, 8)}");
+                        }
+                    }
+                    catch (System.Security.Cryptography.CryptographicException ex)
+                    {
+                        // Neither encrypted nor signed — genuine error
+                        Logger.Error("Decrypt", $"Decryption failed and not a valid signature: {result.ErrorMessage}; {ex.Message}");
+                        MessageBox.Show(
+                            "Could not decrypt or verify this message.\n\n" +
+                            "Why: This message was likely encrypted for a different certificate, or the signature could not be verified.\n\n" +
+                            "Fix: Go to Parcl > Select Certificates and verify your certificates. " +
+                            "If you recently changed certificates, ask the sender to re-send.",
+                            "Parcl — Decrypt/Verify Error",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
                 }
 
                 // ── Step 3: Parse the MIME content to extract actual body ──
@@ -469,21 +500,25 @@ namespace Parcl.Addin
                 mail.Save();
 
                 // Build result message
-                var status = new StringBuilder("Message decrypted successfully.");
+                var status = new StringBuilder();
+                if (isSignOnly)
+                    status.Append("Signature verified successfully.");
+                else
+                    status.Append("Message decrypted successfully.");
                 if (wasSigned)
-                    status.Append($"\n\nSignature verified: {signerInfo ?? "Unknown signer"}");
+                    status.Append($"\n\nSigned by: {signerInfo ?? "Unknown signer"}");
                 if (protectedHeaders?.Subject != null)
                     status.Append($"\nOriginal subject restored.");
                 if (extracted.Attachments.Count > 0)
                     status.Append($"\n{extracted.Attachments.Count} attachment(s) restored.");
 
                 Logger.Info("Decrypt",
-                    $"Message fully decrypted and restored" +
+                    (isSignOnly ? "Sign-only message verified" : "Message fully decrypted") +
                     (wasSigned ? " (signed)" : "") +
                     $" — {extracted.Attachments.Count} attachment(s)");
 
                 MessageBox.Show(status.ToString(),
-                    "Parcl — Decrypted",
+                    isSignOnly ? "Parcl — Signature Verified" : "Parcl — Decrypted",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)

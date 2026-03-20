@@ -35,7 +35,6 @@ namespace Parcl.Core.Tests
         [InlineData("AES-128-CBC")]
         [InlineData("AES-192-CBC")]
         [InlineData("AES-256-CBC")]
-        [InlineData("3DES")]
         public void CryptoSettings_EncryptionAlgorithm_PersistsAllValues(string algo)
         {
             var settings = new ParclSettings();
@@ -51,7 +50,6 @@ namespace Parcl.Core.Tests
         // =====================================================================
 
         [Theory]
-        [InlineData("SHA-1")]
         [InlineData("SHA-256")]
         [InlineData("SHA-384")]
         [InlineData("SHA-512")]
@@ -345,7 +343,7 @@ namespace Parcl.Core.Tests
                 },
                 Crypto = new CryptoPreferences
                 {
-                    EncryptionAlgorithm = "3DES",
+                    EncryptionAlgorithm = "AES-128-CBC",
                     HashAlgorithm = "SHA-512",
                     AlwaysSign = true,
                     AlwaysEncrypt = true
@@ -384,7 +382,7 @@ namespace Parcl.Core.Tests
             Assert.Equal("full@test.com", loaded.UserProfile.EmailAddress);
 
             // Crypto
-            Assert.Equal("3DES", loaded.Crypto.EncryptionAlgorithm);
+            Assert.Equal("AES-128-CBC", loaded.Crypto.EncryptionAlgorithm);
             Assert.Equal("SHA-512", loaded.Crypto.HashAlgorithm);
             Assert.True(loaded.Crypto.AlwaysSign);
             Assert.True(loaded.Crypto.AlwaysEncrypt);

@@ -123,7 +123,6 @@ namespace Parcl.Core.Tests
         [InlineData("2.16.840.1.101.3.4.2.1", "SHA-256")]
         [InlineData("2.16.840.1.101.3.4.2.2", "SHA-384")]
         [InlineData("2.16.840.1.101.3.4.2.3", "SHA-512")]
-        [InlineData("1.3.14.3.2.26", "SHA-1")]
         public void SignEmail_AllHashAlgorithms(string oid, string name)
         {
             var body = Encoding.UTF8.GetBytes($"Signed with {name} by rayketcham@ogjos.com");
@@ -153,7 +152,6 @@ namespace Parcl.Core.Tests
         [InlineData("2.16.840.1.101.3.4.1.2", "AES-128-CBC")]
         [InlineData("2.16.840.1.101.3.4.1.22", "AES-192-CBC")]
         [InlineData("2.16.840.1.101.3.4.1.42", "AES-256-CBC")]
-        [InlineData("1.2.840.113549.3.7", "3DES")]
         public void EncryptEmail_AllAlgorithms(string oid, string name)
         {
             var body = Encoding.UTF8.GetBytes(
@@ -507,7 +505,6 @@ namespace Parcl.Core.Tests
         [InlineData("AES-256-CBC", "SHA-256", false, true)]
         [InlineData("AES-256-CBC", "SHA-256", true, true)]
         [InlineData("AES-128-CBC", "SHA-512", true, true)]
-        [InlineData("3DES", "SHA-1", true, true)]
         [InlineData("AES-192-CBC", "SHA-384", true, true)]
         public void AllSettingsCombinations_EmailRoundTrip(
             string encAlgo, string hashAlgo, bool alwaysSign, bool alwaysEncrypt)

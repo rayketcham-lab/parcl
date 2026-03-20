@@ -454,10 +454,10 @@ namespace Parcl.Addin
                 Logger.Info("Send", $"Send mode: encrypt={shouldEncrypt}, sign={shouldSign}");
 
                 // ── Apply ──
-                // If encrypting: do it ourselves (sign goes INSIDE the encrypted envelope per RFC 5751).
-                // If only signing: use Outlook's native PR_SECURITY_FLAGS.
-                // Never set PR_SECURITY_FLAGS for sign when also encrypting — that double-wraps
-                // and the recipient sees "Signed" as the outer layer instead of "Encrypted".
+                // Parcl is authoritative for ALL signing — never delegate to Outlook's
+                // PR_SECURITY_FLAGS for signing (it defaults to SHA-1).
+                // If encrypting + signing: sign goes INSIDE the encrypted envelope (RFC 5751).
+                // If only signing: Parcl signs and attaches as opaque SignedCms .p7m.
 
                 if (shouldEncrypt)
                 {
@@ -531,10 +531,17 @@ namespace Parcl.Addin
                             }
                         }
 
-                        if (!allNativeCompatible)
+                        if (!allNativeCompatible || shouldSign)
                         {
-                            // Fall back to Parcl envelope for cert-mismatched recipients
-                            Logger.Info("Send", "Falling back to Parcl envelope (cert mismatch detected)");
+                            // Fall back to Parcl envelope when:
+                            // - Any recipient has a cert mismatch, OR
+                            // - Signing is requested (Parcl must control the hash algorithm;
+                            //   native PR_SECURITY_FLAGS delegates to Outlook which defaults to SHA-1)
+                            if (shouldSign)
+                                Logger.Info("Send", "Using Parcl envelope — signing requires Parcl's hash algorithm control");
+                            else
+                                Logger.Info("Send", "Using Parcl envelope — cert mismatch detected");
+
                             string? encryptError = EncapsulateMessage(mail, shouldSign);
                             if (encryptError != null)
                             {
@@ -551,8 +558,9 @@ namespace Parcl.Addin
                         }
                         else
                         {
-                            // All recipients native-compatible — use PR_SECURITY_FLAGS
-                            Logger.Info("Send", "All recipients native-compatible — using PR_SECURITY_FLAGS");
+                            // All recipients native-compatible, encrypt-only — use PR_SECURITY_FLAGS
+                            // Never set SECFLAG_SIGNED here — signing always goes through Parcl
+                            Logger.Info("Send", "All recipients native-compatible — using PR_SECURITY_FLAGS (encrypt-only)");
 
                             const string PR_SEC = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
                             var pa = mail.PropertyAccessor;
@@ -561,20 +569,16 @@ namespace Parcl.Addin
                             catch { flags = 0; }
 
                             flags |= 0x01; // SECFLAG_ENCRYPTED
-                            if (shouldSign)
-                                flags |= 0x02; // SECFLAG_SIGNED
+                            // NEVER set SECFLAG_SIGNED (0x02) — Outlook defaults to SHA-1
 
                             pa.SetProperty(PR_SEC, flags);
 
-                            // Clear Parcl flags — Outlook handles from here
+                            // Clear Parcl flags — Outlook handles encryption from here
                             var encFlag = mail.UserProperties.Find("ParclEncrypt");
                             if (encFlag != null) encFlag.Value = false;
-                            var sigFlag = mail.UserProperties.Find("ParclSign");
-                            if (sigFlag != null) sigFlag.Value = false;
 
                             Logger.Info("Send",
-                                $"Native S/MIME: flags=0x{flags:X}, " +
-                                $"encrypt=true, sign={shouldSign}");
+                                $"Native S/MIME: flags=0x{flags:X}, encrypt=true, sign=false (encrypt-only)");
                         }
                     }
                     else
@@ -600,17 +604,24 @@ namespace Parcl.Addin
                 }
                 else if (shouldSign)
                 {
-                    // Sign-only: use Outlook's native signing
-                    const string PR_SECURITY_FLAGS = "http://schemas.microsoft.com/mapi/proptag/0x6E010003";
-                    const int SECFLAG_SIGNED = 0x02;
+                    // Sign-only: use Parcl's own signing engine so we control the hash algorithm.
+                    // Never delegate to Outlook's native PR_SECURITY_FLAGS — it defaults to SHA-1
+                    // and ignores Parcl's configured hash algorithm.
+                    Logger.Info("Send", "Using Parcl S/MIME signing (sign-only, no encrypt)");
 
-                    var pa = mail.PropertyAccessor;
-                    int flags;
-                    try { flags = (int)pa.GetProperty(PR_SECURITY_FLAGS); }
-                    catch { flags = 0; }
-
-                    pa.SetProperty(PR_SECURITY_FLAGS, flags | SECFLAG_SIGNED);
-                    Logger.Info("Send", "S/MIME signature flag applied (sign-only, no encrypt)");
+                    string? signError = SignOnlyMessage(mail);
+                    if (signError != null)
+                    {
+                        cancel = true;
+                        Logger.Error("Send", $"Signing failed — send blocked: {signError}");
+                        MessageBox.Show(
+                            $"Message NOT sent — signing failed.\n\n{signError}\n\n" +
+                            "To send anyway: toggle the Sign button off, then click Send again.",
+                            "Parcl — Send Blocked",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        return;
+                    }
                 }
             }
             catch (Exception ex)
@@ -791,19 +802,9 @@ namespace Parcl.Addin
                 if (signingCert != null && signingCert.HasPrivateKey)
                 {
                     Logger.Debug("Send", $"Signing cert: {signingCert.Subject}, thumbprint: {signingCert.Thumbprint.Substring(0, 8)}");
-                    var signedCms = new System.Security.Cryptography.Pkcs.SignedCms(
-                        new System.Security.Cryptography.Pkcs.ContentInfo(mimeContent), detached: false);
-                    var signer = new System.Security.Cryptography.Pkcs.CmsSigner(
-                        System.Security.Cryptography.Pkcs.SubjectIdentifierType.IssuerAndSerialNumber,
-                        signingCert)
-                    {
-                        DigestAlgorithm = new System.Security.Cryptography.Oid("2.16.840.1.101.3.4.2.1"),
-                        IncludeOption = System.Security.Cryptography.X509Certificates.X509IncludeOption.WholeChain
-                    };
-                    signedCms.ComputeSignature(signer);
-                    contentToEncrypt = signedCms.Encode();
+                    contentToEncrypt = SmimeHandler.Sign(mimeContent, signingCert);
                     Logger.Info("Send",
-                        $"Signed: {mimeContent.Length} bytes MIME -> {contentToEncrypt.Length} bytes SignedCms (SHA-256)");
+                        $"Signed: {mimeContent.Length} bytes MIME -> {contentToEncrypt.Length} bytes SignedCms ({Settings.Crypto.HashAlgorithm})");
                 }
                 else
                 {
@@ -869,6 +870,102 @@ namespace Parcl.Addin
 
             Logger.Info("Send",
                 $"S/MIME encapsulated — {encrypted.Length} bytes for {recipientCerts.Count} recipient(s)");
+            return null; // success
+        }
+
+        /// <summary>
+        /// Signs a message using Parcl's own SmimeHandler (not Outlook native).
+        /// Builds MIME content from the mail, signs with the configured hash algorithm,
+        /// and replaces the message with an opaque signed .p7m attachment.
+        /// Returns null on success, or an error message if signing failed.
+        /// </summary>
+        private string? SignOnlyMessage(Outlook.MailItem mail)
+        {
+            if (string.IsNullOrEmpty(Settings.UserProfile.SigningCertThumbprint))
+                return "No signing certificate configured.\n\n" +
+                    "Fix: Go to Parcl > Select Certificates and choose a signing certificate.";
+
+            var signingCert = CertStore.FindByThumbprint(Settings.UserProfile.SigningCertThumbprint!);
+            if (signingCert == null || !signingCert.HasPrivateKey)
+                return "Signing certificate not found or missing private key.\n\n" +
+                    "Fix: Go to Parcl > Select Certificates and verify your signing certificate is installed with a private key.";
+
+            Logger.Debug("Send",
+                $"Sign-only cert: {signingCert.Subject}, thumbprint: {signingCert.Thumbprint.Substring(0, 8)}");
+
+            // ── Build MIME content from the mail ──
+            var attachments = new System.Collections.Generic.List<Parcl.Core.Crypto.MimeAttachment>();
+            for (int i = 1; i <= mail.Attachments.Count; i++)
+            {
+                var att = mail.Attachments[i];
+                var tempAtt = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    System.IO.Path.GetRandomFileName() + System.IO.Path.GetExtension(att.FileName));
+                try
+                {
+                    att.SaveAsFile(tempAtt);
+                    attachments.Add(new Parcl.Core.Crypto.MimeAttachment
+                    {
+                        FileName = att.FileName,
+                        Data = System.IO.File.ReadAllBytes(tempAtt)
+                    });
+                }
+                finally
+                {
+                    try { System.IO.File.Delete(tempAtt); } catch { }
+                }
+            }
+
+            var mimeContent = Parcl.Core.Crypto.MimeBuilder.Build(
+                mail.Body, mail.HTMLBody,
+                attachments.Count > 0 ? attachments : null);
+
+            Logger.Debug("Send",
+                $"Sign-only MIME built: {mimeContent.Length} bytes, {attachments.Count} attachment(s)");
+
+            // ── Sign with SmimeHandler (uses configured hash algorithm) ──
+            byte[] signedData;
+            try
+            {
+                signedData = SmimeHandler.Sign(mimeContent, signingCert);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Send", "SmimeHandler.Sign() failed", ex);
+                return $"Signing failed: {ex.Message}";
+            }
+
+            Logger.Info("Send",
+                $"Signed: {mimeContent.Length} bytes MIME -> {signedData.Length} bytes SignedCms ({Settings.Crypto.HashAlgorithm})");
+
+            // ── Replace message content with signed .p7m ──
+            while (mail.Attachments.Count > 0)
+                mail.Attachments[1].Delete();
+
+            mail.HTMLBody = "<div style=\"font-family:Segoe UI,sans-serif;padding:24px;\">" +
+                "<h3 style=\"color:#4FC3F7;\">&#9997; Signed with Parcl</h3>" +
+                "<p>This message is digitally signed. Use the <b>Parcl Decrypt</b> button on the ribbon to verify and read it.</p>" +
+                "<p style=\"color:#888;font-size:11px;\">If you don't have Parcl installed, " +
+                "the smime.p7m attachment can be verified by any S/MIME-compatible email client.</p>" +
+                "</div>";
+
+            var tempPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName() + ".p7m");
+            System.IO.File.WriteAllBytes(tempPath, signedData);
+
+            mail.Attachments.Add(tempPath,
+                Outlook.OlAttachmentType.olByValue,
+                Type.Missing,
+                "smime.p7m");
+
+            try { System.IO.File.Delete(tempPath); } catch { }
+
+            var flag = mail.UserProperties.Find("ParclSign");
+            if (flag != null)
+                flag.Value = false;
+
+            Logger.Info("Send",
+                $"Sign-only complete — {signedData.Length} bytes signed with {Settings.Crypto.HashAlgorithm}");
             return null; // success
         }
 

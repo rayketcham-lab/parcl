@@ -41,14 +41,13 @@ namespace Parcl.Core.Tests
         }
 
         // =====================================================================
-        // Encryption Algorithm Tests (AES-128, AES-192, AES-256, 3DES)
+        // Encryption Algorithm Tests (AES-128, AES-192, AES-256)
         // =====================================================================
 
         [Theory]
         [InlineData("2.16.840.1.101.3.4.1.2", "AES-128-CBC")]   // AES-128-CBC
         [InlineData("2.16.840.1.101.3.4.1.22", "AES-192-CBC")]  // AES-192-CBC
         [InlineData("2.16.840.1.101.3.4.1.42", "AES-256-CBC")]  // AES-256-CBC
-        [InlineData("1.2.840.113549.3.7", "3DES")]               // 3DES-CBC
         public void Encrypt_WithAlgorithm_Succeeds(string oid, string name)
         {
             AddToStore(_encCert1);
@@ -95,11 +94,10 @@ namespace Parcl.Core.Tests
         }
 
         // =====================================================================
-        // Hash Algorithm Tests (SHA-1, SHA-256, SHA-384, SHA-512)
+        // Hash Algorithm Tests (SHA-256, SHA-384, SHA-512 — secure only)
         // =====================================================================
 
         [Theory]
-        [InlineData("1.3.14.3.2.26", "SHA-1")]
         [InlineData("2.16.840.1.101.3.4.2.1", "SHA-256")]
         [InlineData("2.16.840.1.101.3.4.2.2", "SHA-384")]
         [InlineData("2.16.840.1.101.3.4.2.3", "SHA-512")]
@@ -117,6 +115,262 @@ namespace Parcl.Core.Tests
             // Use verifySignatureOnly to skip chain validation for self-signed test certs
             signedCms.CheckSignature(verifySignatureOnly: true);
             Assert.Equal(plaintext, signedCms.ContentInfo.Content);
+        }
+
+        // =====================================================================
+        // SmimeHandler Hash Algorithm Enforcement (regression: never SHA-1 by default)
+        // =====================================================================
+
+        [Fact]
+        public void Sign_DefaultHandler_UsesSHA256_NotSHA1()
+        {
+            // Regression test: Parcl must NEVER default to SHA-1.
+            // Outlook's native PR_SECURITY_FLAGS signing used SHA-1 which caused
+            // "encryption strength not supported" errors. SmimeHandler must always
+            // use SHA-256 (or higher) as configured.
+            var handler = new SmimeHandler(); // defaults: AES-256-CBC, SHA-256
+            var plaintext = Encoding.UTF8.GetBytes("SHA-1 regression test");
+
+            var signed = handler.Sign(plaintext, _signingCert);
+
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            var digestOid = signedCms.SignerInfos[0].DigestAlgorithm.Value;
+
+            // MUST be SHA-256
+            Assert.Equal("2.16.840.1.101.3.4.2.1", digestOid);
+            // MUST NOT be SHA-1
+            Assert.NotEqual("1.3.14.3.2.26", digestOid);
+        }
+
+        [Theory]
+        [InlineData("SHA-256", "2.16.840.1.101.3.4.2.1")]
+        [InlineData("SHA-384", "2.16.840.1.101.3.4.2.2")]
+        [InlineData("SHA-512", "2.16.840.1.101.3.4.2.3")]
+        public void Sign_ConfiguredHashAlgorithm_IsEmbeddedInOutput(string hashAlgorithm, string expectedOid)
+        {
+            // Verify SmimeHandler.Sign() actually uses the configured hash algorithm,
+            // not a hardcoded value or platform default.
+            var handler = new SmimeHandler("AES-256-CBC", hashAlgorithm);
+            var plaintext = Encoding.UTF8.GetBytes($"Configured hash test: {hashAlgorithm}");
+
+            var signed = handler.Sign(plaintext, _signingCert);
+
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            Assert.Equal(expectedOid, signedCms.SignerInfos[0].DigestAlgorithm.Value);
+
+            // Verify signature is valid
+            signedCms.CheckSignature(verifySignatureOnly: true);
+            Assert.Equal(plaintext, signedCms.ContentInfo.Content);
+        }
+
+        [Theory]
+        [InlineData("SHA-256")]
+        [InlineData("SHA-384")]
+        [InlineData("SHA-512")]
+        public void Sign_NeverFallsBackToSHA1(string hashAlgorithm)
+        {
+            // Ensure that for all supported hash algorithms, the signed output
+            // never contains SHA-1 (OID 1.3.14.3.2.26).
+            var handler = new SmimeHandler("AES-256-CBC", hashAlgorithm);
+            var plaintext = Encoding.UTF8.GetBytes("No SHA-1 fallback test");
+
+            var signed = handler.Sign(plaintext, _signingCert);
+
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            Assert.NotEqual("1.3.14.3.2.26", signedCms.SignerInfos[0].DigestAlgorithm.Value);
+        }
+
+        [Fact]
+        public void Sign_UnknownHashAlgorithm_FallsBackToSHA256_NotSHA1()
+        {
+            // If an unknown/invalid hash algorithm is configured, SmimeHandler should
+            // fall back to SHA-256, never SHA-1.
+            var handler = new SmimeHandler("AES-256-CBC", "INVALID-ALGO");
+            var plaintext = Encoding.UTF8.GetBytes("Fallback test");
+
+            var signed = handler.Sign(plaintext, _signingCert);
+
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            // Should fall back to SHA-256
+            Assert.Equal("2.16.840.1.101.3.4.2.1", signedCms.SignerInfos[0].DigestAlgorithm.Value);
+        }
+
+        // =====================================================================
+        // Insecure Algorithm Blocklist Tests
+        // =====================================================================
+
+        [Theory]
+        [InlineData("SHA-1")]
+        [InlineData("SHA1")]
+        [InlineData("MD5")]
+        [InlineData("MD2")]
+        [InlineData("MD4")]
+        public void Constructor_BlockedHashAlgorithm_ThrowsArgumentException(string hashAlgo)
+        {
+            var ex = Assert.Throws<ArgumentException>(
+                () => new SmimeHandler("AES-256-CBC", hashAlgo));
+            Assert.Contains("blocked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("insecure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData("DES")]
+        [InlineData("DES-CBC")]
+        [InlineData("3DES")]
+        [InlineData("3DES-CBC")]
+        [InlineData("RC2")]
+        [InlineData("RC2-CBC")]
+        [InlineData("RC4")]
+        public void Constructor_BlockedEncryptionAlgorithm_ThrowsArgumentException(string encAlgo)
+        {
+            var ex = Assert.Throws<ArgumentException>(
+                () => new SmimeHandler(encAlgo, "SHA-256"));
+            Assert.Contains("blocked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("insecure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData("SHA-256")]
+        [InlineData("SHA-384")]
+        [InlineData("SHA-512")]
+        public void Constructor_SecureHashAlgorithm_DoesNotThrow(string hashAlgo)
+        {
+            var handler = new SmimeHandler("AES-256-CBC", hashAlgo);
+            Assert.NotNull(handler);
+        }
+
+        [Theory]
+        [InlineData("AES-128-CBC")]
+        [InlineData("AES-192-CBC")]
+        [InlineData("AES-256-CBC")]
+        [InlineData("AES-128-GCM")]
+        [InlineData("AES-256-GCM")]
+        public void Constructor_SecureEncryptionAlgorithm_DoesNotThrow(string encAlgo)
+        {
+            var handler = new SmimeHandler(encAlgo, "SHA-256");
+            Assert.NotNull(handler);
+        }
+
+        [Theory]
+        [InlineData("MD5", true)]
+        [InlineData("SHA-1", true)]
+        [InlineData("SHA1", true)]
+        [InlineData("1.3.14.3.2.26", true)]    // SHA-1 OID
+        [InlineData("1.2.840.113549.2.5", true)] // MD5 OID
+        [InlineData("SHA-256", false)]
+        [InlineData("SHA-384", false)]
+        [InlineData("SHA-512", false)]
+        public void IsBlockedHashAlgorithm_ReturnsCorrectResult(string algo, bool expectedBlocked)
+        {
+            Assert.Equal(expectedBlocked, SmimeHandler.IsBlockedHashAlgorithm(algo));
+        }
+
+        [Theory]
+        [InlineData("DES", true)]
+        [InlineData("3DES", true)]
+        [InlineData("RC2", true)]
+        [InlineData("RC4", true)]
+        [InlineData("1.2.840.113549.3.7", true)]  // 3DES OID
+        [InlineData("1.2.840.113549.3.2", true)]  // RC2 OID
+        [InlineData("AES-256-CBC", false)]
+        [InlineData("AES-128-GCM", false)]
+        public void IsBlockedEncryptionAlgorithm_ReturnsCorrectResult(string algo, bool expectedBlocked)
+        {
+            Assert.Equal(expectedBlocked, SmimeHandler.IsBlockedEncryptionAlgorithm(algo));
+        }
+
+        [Fact]
+        public void Verify_InsecureHashAlgorithm_FlagsWarning()
+        {
+            // Simulate receiving a message signed with SHA-1 (by an external sender)
+            var plaintext = Encoding.UTF8.GetBytes("Signed with insecure SHA-1 by someone else");
+            var signed = SignWithHash(plaintext, _signingCert, "1.3.14.3.2.26"); // SHA-1
+
+            var handler = new SmimeHandler();
+            // Use signature-only verification (self-signed cert)
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            signedCms.CheckSignature(verifySignatureOnly: true);
+
+            // Verify the digest algorithm is SHA-1
+            Assert.Equal("1.3.14.3.2.26", signedCms.SignerInfos[0].DigestAlgorithm.Value);
+
+            // SmimeHandler.Verify should flag the insecure algorithm
+            // (note: Verify calls CheckSignature with verifySignatureOnly: false,
+            // which may fail for self-signed certs, so we test the static helper instead)
+            Assert.True(SmimeHandler.IsBlockedHashAlgorithm("1.3.14.3.2.26"));
+            Assert.True(SmimeHandler.IsBlockedHashAlgorithm("SHA-1"));
+        }
+
+        [Theory]
+        [InlineData("SHA-256")]
+        [InlineData("SHA-384")]
+        [InlineData("SHA-512")]
+        public void SignOnly_RoundTrip_VerifyAndExtractContent(string hashAlgorithm)
+        {
+            // Simulates the sign-only flow: sign content, then verify and extract.
+            // This is the code path used when only signing (no encryption).
+            var handler = new SmimeHandler("AES-256-CBC", hashAlgorithm);
+            var originalContent = Encoding.UTF8.GetBytes("Sign-only round-trip test message");
+
+            // Sign
+            var signed = handler.Sign(originalContent, _signingCert);
+
+            // Verify (simulates the decrypt button's sign-only path)
+            var verifyResult = handler.Verify(signed);
+            // verifySignatureOnly=false fails for self-signed certs, so check manually
+            var signedCms = new SignedCms();
+            signedCms.Decode(signed);
+            signedCms.CheckSignature(verifySignatureOnly: true);
+
+            Assert.Equal(originalContent, signedCms.ContentInfo.Content);
+            Assert.True(signedCms.SignerInfos.Count > 0);
+            Assert.NotNull(signedCms.SignerInfos[0].Certificate);
+        }
+
+        [Fact]
+        public void SignThenEncrypt_UsesConfiguredHash_NotHardcoded()
+        {
+            // Verify the sign-then-encrypt pipeline uses the configured hash algorithm.
+            // Regression: EncapsulateMessage previously hardcoded SHA-256 OID instead
+            // of using SmimeHandler.
+            AddToStore(_encCert1);
+            try
+            {
+                var handler384 = new SmimeHandler("AES-256-CBC", "SHA-384");
+                var plaintext = Encoding.UTF8.GetBytes("Sign-then-encrypt hash algorithm test");
+
+                // Sign with SHA-384
+                var signed = handler384.Sign(plaintext, _signingCert);
+
+                // Verify the digest algorithm is SHA-384
+                var signedCms = new SignedCms();
+                signedCms.Decode(signed);
+                Assert.Equal("2.16.840.1.101.3.4.2.2", signedCms.SignerInfos[0].DigestAlgorithm.Value);
+
+                // Encrypt the signed data (simulates sign-then-encrypt)
+                var encrypted = handler384.Encrypt(signed, new X509Certificate2Collection { _encCert1 });
+
+                // Decrypt
+                var envelope = new EnvelopedCms();
+                envelope.Decode(encrypted);
+                envelope.Decrypt();
+
+                // Verify the inner signature still has SHA-384
+                var innerCms = new SignedCms();
+                innerCms.Decode(envelope.ContentInfo.Content);
+                Assert.Equal("2.16.840.1.101.3.4.2.2", innerCms.SignerInfos[0].DigestAlgorithm.Value);
+                innerCms.CheckSignature(verifySignatureOnly: true);
+                Assert.Equal(plaintext, innerCms.ContentInfo.Content);
+            }
+            finally
+            {
+                RemoveFromStore(_encCert1);
+            }
         }
 
         // =====================================================================
