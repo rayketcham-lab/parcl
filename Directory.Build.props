@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <Version>1.5.1</Version>
-    <AssemblyVersion>1.5.1.0</AssemblyVersion>
-    <FileVersion>1.5.1.0</FileVersion>
-    <InformationalVersion>1.5.1</InformationalVersion>
+    <Version>1.5.2</Version>
+    <AssemblyVersion>1.5.2.0</AssemblyVersion>
+    <FileVersion>1.5.2.0</FileVersion>
+    <InformationalVersion>1.5.2</InformationalVersion>
     <Company>Quantum Nexum</Company>
     <Product>Parcl - S/MIME Certificate Manager for Outlook</Product>
     <Copyright>Copyright © 2026 Quantum Nexum. All rights reserved.</Copyright>

@@ -482,10 +482,11 @@ namespace Parcl.Addin
                 Logger.Info("Send", $"Send mode: encrypt={shouldEncrypt}, sign={shouldSign}");
 
                 // ── Apply ──
-                // Parcl is authoritative for ALL signing — never delegate to Outlook's
-                // PR_SECURITY_FLAGS for signing (it defaults to SHA-1).
-                // If encrypting + signing: sign goes INSIDE the encrypted envelope (RFC 5751).
-                // If only signing: Parcl signs and attaches as opaque SignedCms .p7m.
+                // Parcl is authoritative for S/MIME settings. Signing algorithm is forced
+                // at startup via MAPI profile DER reordering (ForceOutlookSigningAlgorithm).
+                // Native S/MIME (PR_SECURITY_FLAGS) is used when enabled and certs are available.
+                // Parcl envelope is used for encrypt when native is disabled or for sign+encrypt
+                // inside the encrypted envelope (RFC 5751).
 
                 if (shouldEncrypt)
                 {
@@ -513,50 +514,32 @@ namespace Parcl.Addin
                                 continue;
                             }
 
-                            // Check if the cert email matches the SMTP address
-                            // If it doesn't, Outlook's native engine won't find it
-                            bool certMatchesSmtp = false;
+                            // Publish cert to AddressEntry so Outlook can find it natively.
+                            // We trust ANY cert that Parcl resolved for the recipient — the cert
+                            // email may differ from the SMTP address (enterprise Exchange/AD scenarios
+                            // where the cert has an internal email like user@adxuser.com but the
+                            // SMTP address is user@company.com). Outlook's native engine can use
+                            // the cert once it's published to the AddressEntry.
                             var certEmail = Parcl.Core.Models.CertificateInfo.FromX509(cert).Email;
-                            if (!string.IsNullOrEmpty(certEmail) &&
-                                certEmail.Equals(smtpAddr, StringComparison.OrdinalIgnoreCase))
+                            try
                             {
-                                certMatchesSmtp = true;
-                            }
-
-                            // Also check if Subject contains the email
-                            if (!certMatchesSmtp && cert.Subject != null &&
-                                cert.Subject.ToLowerInvariant().Contains(smtpAddr.ToLowerInvariant()))
-                            {
-                                certMatchesSmtp = true;
-                            }
-
-                            if (certMatchesSmtp)
-                            {
-                                // Publish cert to AddressEntry for good measure
-                                try
+                                var addrEntry = recipient.AddressEntry;
+                                if (addrEntry != null)
                                 {
-                                    var addrEntry = recipient.AddressEntry;
-                                    if (addrEntry != null)
-                                    {
-                                        var certBytes = cert.Export(
-                                            System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
-                                        addrEntry.PropertyAccessor.SetProperty(
-                                            PR_USER_X509_CERT,
-                                            new object[] { certBytes });
-                                    }
+                                    var certBytes = cert.Export(
+                                        System.Security.Cryptography.X509Certificates.X509ContentType.Cert);
+                                    addrEntry.PropertyAccessor.SetProperty(
+                                        PR_USER_X509_CERT,
+                                        new object[] { certBytes });
                                 }
-                                catch { }
+                            }
+                            catch { }
 
-                                Logger.Info("Send",
-                                    $"Native compatible: {ParclLogger.SanitizeEmail(smtpAddr)}");
-                            }
-                            else
-                            {
-                                Logger.Info("Send",
-                                    $"Cert mismatch for {ParclLogger.SanitizeEmail(smtpAddr)} " +
-                                    $"(cert={ParclLogger.SanitizeEmail(certEmail ?? "none")}) — will use Parcl envelope");
-                                allNativeCompatible = false;
-                            }
+                            Logger.Info("Send",
+                                $"Native compatible: {ParclLogger.SanitizeEmail(smtpAddr)}" +
+                                (certEmail != null && !certEmail.Equals(smtpAddr, StringComparison.OrdinalIgnoreCase)
+                                    ? $" (cert email: {ParclLogger.SanitizeEmail(certEmail)})"
+                                    : ""));
                         }
 
                         if (!allNativeCompatible)
