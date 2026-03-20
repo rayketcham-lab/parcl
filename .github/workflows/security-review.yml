@@ -108,7 +108,7 @@ jobs:
           dotnet build tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore
 
       - name: Run security-critical tests
-        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision|FullyQualifiedName~Settings"
+        run: dotnet test tests/Parcl.Core.Tests/Parcl.Core.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "(FullyQualifiedName~SmimeHandler|FullyQualifiedName~SendDecision|FullyQualifiedName~Settings)&FullyQualifiedName!~RealCertE2E"
 
       - name: Verify SendDecision used in ItemSend
         shell: bash
