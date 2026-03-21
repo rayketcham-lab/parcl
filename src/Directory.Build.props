@@ -1,4 +1,7 @@
 <Project>
+  <!-- Import root Directory.Build.props for centralized versioning -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))" />
+
   <!--
     Shared build properties for all Parcl assemblies.
     Applies strong naming, deterministic builds, and enterprise hardening.

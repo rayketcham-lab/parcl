@@ -9,7 +9,7 @@
 
 Parcl is a Microsoft Outlook COM add-in that brings end-to-end S/MIME email encryption, digital signatures, and certificate management directly into the Outlook ribbon. Encrypted messages display inline in the reading pane — no `.p7m` attachments, no external tools, no server-side configuration.
 
-**v0.10.2** — Stable Release
+**v1.7.0** — Stable Release
 
 [Homepage](https://rayketcham-lab.github.io/parcl/) | [Releases](https://github.com/rayketcham-lab/parcl/releases) | [Issues](https://github.com/rayketcham-lab/parcl/issues) | [quantumnexum.com](https://quantumnexum.com) | Support: help@quantumnexum.com
 
