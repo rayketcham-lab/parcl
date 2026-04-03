@@ -257,6 +257,16 @@ Get-Content "$env:APPDATA\Parcl\logs\parcl-$(Get-Date -Format 'yyyy-MM-dd').json
   ForEach-Object { try { $_ | ConvertFrom-Json } catch {} }
 ```
 
+## Contributing
+
+We welcome contributions. Before submitting a PR:
+
+1. Build with zero warnings in Visual Studio or `dotnet build -warnaserror`
+2. Test your changes against Outlook 2019+ (both 32-bit and 64-bit)
+3. Run any existing unit tests
+
+All commits follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `ci:`, `security:`.
+
 ---
 
 ## License
