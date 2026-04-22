@@ -17,6 +17,11 @@ on:
         description: 'Flag issues with no linked commit after N days'
         default: '7'
 
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
 jobs:
   # ── 1:1 minimum — every PR/push must reference an issue ──────────────
   commit-references-issue:
