@@ -19,6 +19,8 @@ on:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   # ── 1:1 minimum — every PR/push must reference an issue ──────────────
