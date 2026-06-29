@@ -77,15 +77,19 @@ jobs:
           ; do
             MATCHES=$(git grep -l -i -E "$pattern" -- '*.cs' '*.json' '*.yml' '*.yaml' '*.xml' '*.config' 2>/dev/null || true)
             if [ -n "$MATCHES" ]; then
-              REAL=$(echo "$MATCHES" | grep -v -E "(Test|test|\.example|CredentialProtector|CertExchange|MimeBuilder)" || true)
+              # Exclude: test files, examples, known-safe classes, and workflow
+              # files (which contain these strings as grep-pattern literals, not
+              # as actual credentials).
+              REAL=$(echo "$MATCHES" | grep -v -E "(Test|test|\.example|CredentialProtector|CertExchange|MimeBuilder|\.github/workflows/)" || true)
               if [ -n "$REAL" ]; then
-                echo "::warning::Potential secret pattern '$pattern' found in: $REAL"
+                echo "::error::Potential secret pattern '$pattern' found in: $REAL"
                 FOUND=$((FOUND + 1))
               fi
             fi
           done
           if [ "$FOUND" -gt 0 ]; then
-            echo "::warning::$FOUND potential secret pattern(s) found — review above"
+            echo "::error::$FOUND potential secret pattern(s) found — fix before merging"
+            exit 1
           else
             echo "No secrets detected"
           fi
@@ -136,3 +140,22 @@ jobs:
             exit 1
           fi
           echo "No weak algorithm references found"
+
+  disabled-workflow-guard:
+    name: No Workflows Disabled by Inactivity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for disabled_inactivity workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DISABLED=$(gh api "repos/${REPO}/actions/workflows" \
+            --jq '[.workflows[] | select(.state == "disabled_inactivity") | .name] | join(", ")')
+          if [ -n "$DISABLED" ]; then
+            echo "::error::Workflow(s) auto-disabled by GitHub inactivity: ${DISABLED}"
+            echo "Re-enable with: gh workflow enable <name>.yml -R ${REPO}"
+            exit 1
+          fi
+          echo "All workflows are active — no disabled_inactivity state found."
