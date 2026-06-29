@@ -1,0 +1,42 @@
+name: Keepalive
+
+# Runs weekly to prevent GitHub's 60-day inactivity auto-disable.
+# GitHub disables scheduled workflows that have had no runs in 60 days.
+# This workflow runs every Monday, well within that window, and dispatches
+# the other schedule-only workflows so they also accumulate weekly runs.
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'   # Weekly Monday 05:00 UTC
+  workflow_dispatch:       # Allow manual trigger
+
+permissions:
+  actions: write   # needed for gh workflow run
+
+jobs:
+  keepalive:
+    name: Prevent 60-day inactivity disable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch daily workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching daily.yml to keep it active..."
+          gh workflow run daily.yml -R "$GITHUB_REPOSITORY"
+          echo "daily.yml dispatched"
+
+      - name: Confirm all scheduled workflows are active
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Checking workflow states..."
+          DISABLED=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows" \
+            --jq '[.workflows[] | select(.state == "disabled_inactivity") | .name] | @tsv')
+          if [ -n "$DISABLED" ]; then
+            echo "::error::Workflows disabled by inactivity: ${DISABLED}"
+            exit 1
+          fi
+          echo "All workflows are active."
